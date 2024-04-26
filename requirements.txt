@@ -1,0 +1,24 @@
+pygfx>=0.2.0
+numpy
+pandas
+scipy
+six
+cmap
+
+#extra: all
+
+jupyter-rfb
+PySide6
+ipywidgets  # ipywidget is installed with jupyter_rfb
+sidecar
+
+#extra: docs
+
+mkdocs
+mkdocs-material[imaging]
+mkdocstrings-python
+mkdocs-minify-plugin
+mkdocs-literate-nav
+mkdocs-gen-files
+mkdocs-glightbox
+mkdocs-section-index
