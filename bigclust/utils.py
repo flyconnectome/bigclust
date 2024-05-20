@@ -2,18 +2,19 @@ import cmap
 
 import numpy as np
 
+
 def _type_of_script() -> str:
     """Return context (terminal, jupyter, colab, iPython) in which navis is run."""
     try:
         ipy_str = str(type(get_ipython()))  # noqa: F821
-        if 'zmqshell' in ipy_str:
-            return 'jupyter'
-        elif 'colab' in ipy_str:
-            return 'colab'
+        if "zmqshell" in ipy_str:
+            return "jupyter"
+        elif "colab" in ipy_str:
+            return "colab"
         else:  # if 'terminal' in ipy_str:
-            return 'ipython'
+            return "ipython"
     except BaseException:
-        return 'terminal'
+        return "terminal"
 
 
 def is_jupyter() -> bool:
@@ -29,7 +30,7 @@ def is_jupyter() -> bool:
     False
 
     """
-    return _type_of_script() in ('jupyter', 'colab')
+    return _type_of_script() in ("jupyter", "colab")
 
 
 def adjust_linkage_colors(dendrogram, clusters, cluster_colors=None):
@@ -53,34 +54,47 @@ def adjust_linkage_colors(dendrogram, clusters, cluster_colors=None):
     """
     assert isinstance(dendrogram, dict)
     assert isinstance(clusters, (list, np.ndarray))
-    assert len(clusters) == len(dendrogram['ivl'])
+    assert len(clusters) == len(dendrogram["ivl"])
 
     # Make sure clusters are numpy array
     clusters = np.asarray(clusters)
-    cl = np.unique(clusters)
+
+    # We should order the clusters by their appearance in the dendrogram
+    # to avoid having the same color assigned to adjacent clusters
+    cl, ix = np.unique(clusters[dendrogram["leaves"]], return_index=True)
+    cl = cl[np.argsort(ix)]
 
     # Set a default palette
     if cluster_colors is None:
-        cluster_colors = "tab20"
+        cluster_colors = "tab10"
 
     if isinstance(cluster_colors, str):
-        cluster_colors = dict(zip(cl, cmap.Colormap(cluster_colors).iter_colors(len(cl))))
+        # Get all the colors from the palette - if we ask for more than
+        # the palette has, it will start cycling oddly:
+        # Imagine a palette with 3 colors, r, g, b. If we ask for 5 colors,
+        # we will get r, r, g, g, b instead of r, g, b, r, g.
+        colors = list(cmap.Colormap(cluster_colors).iter_colors())
+        cluster_colors = {c: colors[i % len(colors)] for i, c in enumerate(cl)}
         cluster_colors = {k: tuple(v) for k, v in cluster_colors.items()}
     elif isinstance(cluster_colors, dict):
-        assert all([c in cluster_colors for c in cl]), "Not all clusters have colors assigned."
+        assert all(
+            [c in cluster_colors for c in cl]
+        ), "Not all clusters have colors assigned."
     else:
         raise ValueError(f"Expected dict or str, got {type(cluster_colors)}.")
 
     # First we can adjust the leaf colors
-    dendrogram['leaves_color_list'] = [cluster_colors[c] for c in clusters[dendrogram['leaves']]]
+    dendrogram["leaves_color_list"] = [
+        cluster_colors[c] for c in clusters[dendrogram["leaves"]]
+    ]
 
-    # Next, we need to adjust the link colors. For that we will map each "hinge" first to allits leafs
+    # Next, we need to adjust the link colors. For that we will map each "hinge" first to all its leafs
     parents = {}
     top_center_to_ix = {}
     leafs = []
-    for i in range(len(dendrogram['icoord'])):
-        ic = dendrogram['icoord'][i]
-        dc = dendrogram['dcoord'][i]
+    for i in range(len(dendrogram["icoord"])):
+        ic = dendrogram["icoord"][i]
+        dc = dendrogram["dcoord"][i]
 
         top_center = (ic[0] + (ic[-1] - ic[0]) / 2, dc[1])
         bottom_left = (ic[0], dc[0])
@@ -98,8 +112,8 @@ def adjust_linkage_colors(dendrogram, clusters, cluster_colors=None):
             leafs.append(int((ic[-1] - 5) / 10))
             parents[int((ic[-1] - 5) / 10)] = top_center
 
-    ix_to_leaf = dict(zip(range(len(leafs)), dendrogram['leaves']))
-    hinge_to_leafs = {i: [] for i in range(len(dendrogram['icoord']))}
+    ix_to_leaf = dict(zip(range(len(leafs)), dendrogram["leaves"]))
+    hinge_to_leafs = {i: [] for i in range(len(dendrogram["icoord"]))}
     for i, l_ix in enumerate(leafs):
         p = parents.get(l_ix, None)
         while p:
@@ -112,47 +126,9 @@ def adjust_linkage_colors(dendrogram, clusters, cluster_colors=None):
         cl = np.unique(clusters[leafs])
         # If this hinge maps to only one cluster we can give it a color
         if len(cl) == 1:
-            dendrogram['color_list'][i] = cluster_colors[cl[0]]
+            dendrogram["color_list"][i] = cluster_colors[cl[0]]
         # If it maps to multiple clusters, we'll give it a gray color
         else:
-            dendrogram['color_list'][i] = (0.5, 0.5, 0.5, 1.0)
+            dendrogram["color_list"][i] = (0.5, 0.5, 0.5, 1.0)
 
-
-
-
-
-
-
-
-
-    to_map = list(range(len(dendrogram['icoord'])))
-
-    i_to_leaf = {}
-    pos_to_leaf = {}
-    while to_map:
-        i = to_map[0]
-
-        ic = dendrogram['icoord'][i]
-        dc = dendrogram['dcoord'][i]
-
-        # Check if this is a leaf (we're assuming leafs are at y=0 and spaced out in intervals of 10 with a +5 offset)
-        if dc[0] == 0:
-            i_to_leaf[i] = int((ic[0] - 5) / 10)
-        elif dc[-1] == 0:
-            i_to_leaf[i] = int((ic[-1] - 5) / 10)
-        elif (ic[0], dc[0]) in pos_to_leaf:
-            i_to_leaf[i] = pos_to_leaf[(ic[0], dc[0])]
-        elif (ic[-1], dc[1]) in pos_to_leaf:
-            i_to_leaf[i] = pos_to_leaf[(ic[-1], dc[1])]
-        else:
-            # If we ended up here, we can't yet map this hinge
-            continue
-
-        # If we got to here, we found a mapping
-        # We track this hinge by its top center position, i.e. where the next
-        # higher hinge would attach
-        top_center = (ic[0] + (ic[-1] - ic[0]) / 2, dc[1])
-        pos_to_leaf[top_center] = i_to_leaf[i]
-        to_map.pop(0)
-
-
+    return hinge_to_leafs

@@ -250,6 +250,150 @@ class Figure:
             )
             return self.widget
 
+    def close(self):
+        """Close the viewer."""
+        # Close if not already closed
+        if not self.canvas.is_closed():
+            self.canvas.close()
+
+    def set_bgcolor(self, c):
+        """Set background color.
+
+        Parameters
+        ----------
+        c :     tuple | str
+                RGB(A) color to use for the background.
+
+        """
+        self._background.set_colors(gfx.Color(c).rgba)
+
+    def show_controls(self):
+        """Show controls."""
+        raise NotImplementedError("Controls not implemented for this viewer.")
+
+    def hide_controls(self):
+        """Hide controls."""
+        if self._is_jupyter:
+            if self.widget.toolbar:
+                self.widget.toolbar.hide()
+        else:
+            if hasattr(self, "_controls"):
+                self._controls.hide()
+
+    def _toggle_controls(self):
+        """Switch controls on and off."""
+        if self._is_jupyter:
+            if self.widget.toolbar:
+                self.widget.toolbar.toggle()
+        else:
+            if not hasattr(self, "_controls"):
+                self.show_controls()
+            elif self._controls.isVisible():
+                self.hide_controls()
+            else:
+                self.show_controls()
+
+    def _toggle_fps(self):
+        """Switch FPS measurement on and off."""
+        self._show_fps = not self._show_fps
+
+
+class Figure(BaseFigure):
+    """Figure.
+
+    Parameters
+    ----------
+    max_fps :   int, optional
+                Maximum frames per second to render.
+    size :      tuple, optional
+                Size of the viewer window.
+    show :      bool, optional
+                Whether to immediately show the viewer. Note that this has no
+                effect in Jupyter. There you will have to call ``.show()`` manually
+                on the last line of a cell for the viewer to appear.
+    **kwargs
+                Keyword arguments are passed through to ``WgpuCanvas``.
+
+    """
+
+    # Palette used for assigning colors to objects
+    palette = "seaborn:tab10"
+
+    def __init__(
+        self,
+        offscreen=False,
+        max_fps=30,
+        size=None,
+        show=True,
+        **kwargs,
+    ):
+        super().__init__(offscreen=offscreen, max_fps=max_fps, size=size, **kwargs)
+
+        # Set up a default scene
+        self.scene = gfx.Scene()
+        # self.scene.add(gfx.AmbientLight(intensity=1))
+
+        # Add the background (from BaseFigure) to the scene
+        self.scene.add(gfx.Background(None, self._background))
+
+        # Add a camera
+        self.camera = gfx.OrthographicCamera()
+
+        # Setup overlay
+        self.overlay_camera = gfx.NDCCamera()
+        self.overlay_scene = gfx.Scene()
+
+        # Add a controller
+        self.controller = gfx.PanZoomController(
+            self.camera, register_events=self.renderer
+        )
+
+        # This starts the animation loop
+        if show and not self._is_jupyter:
+            self.show()
+
+    def _animate(self):
+        """Animate the scene."""
+        self._run_user_animations()
+
+        # Now render the scene
+        if self._show_fps:
+            with self.stats:
+                self.renderer.render(self.scene, self.camera, flush=False)
+                self.renderer.render(
+                    self.overlay_scene, self.overlay_camera, flush=False
+                )
+            self.stats.render()
+        else:
+            self.renderer.render(self.scene, self.camera, flush=False)
+            self.renderer.render(self.overlay_scene, self.overlay_camera)
+
+        self.canvas.request_draw()
+
+    @property
+    def x_scale(self):
+        """The x-scale of the scene."""
+        return self.scene.local.matrix[0, 0]
+
+    @x_scale.setter
+    def x_scale(self, x):
+        assert x > 0
+        mat = np.copy(self.scene.local.matrix)
+        mat[0, 0] = x
+        self.scene.local.matrix = mat
+
+    @property
+    def y_scale(self):
+        """The y-scale of the scene."""
+        return self.scene.local.matrix[1, 1]
+
+    @y_scale.setter
+    def y_scale(self, y):
+        assert y > 0
+        mat = np.copy(self.scene.local.matrix)
+        mat[1, 1] = y
+        self.scene.local.matrix = mat
+
     def center_camera(self):
         """Center camera on visuals."""
         if len(self.scene.children):
@@ -267,20 +411,7 @@ class Figure:
         # Clear first to free all visuals
         self.clear()
 
-        # Close if not already closed
-        if not self.canvas.is_closed():
-            self.canvas.close()
-
-    def set_bgcolor(self, c):
-        """Set background color.
-
-        Parameters
-        ----------
-        c :     tuple | str
-                RGB(A) color to use for the background.
-
-        """
-        self._background.set_colors(gfx.Color(c).rgba)
+        super().close()
 
     def is_visible(self, obj, offset=0):
         """Test if object is visible to camera."""
@@ -341,6 +472,73 @@ class Figure:
 
         return pos_world
 
-    def _toggle_fps(self):
-        """Switch FPS measurement on and off."""
-        self._show_fps = not self._show_fps
+    def show_message(
+        self, message, position="top-right", font_size=20, color=None, duration=None
+    ):
+        """Show message on canvas.
+
+        Parameters
+        ----------
+        message :   str | None
+                    Message to show. Set to `None` to remove the existing message.
+        position :  "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center"
+                    Position of the message on the canvas.
+        font_size : int, optional
+                    Font size of the message.
+        color :     str | tuple, optional
+                    Color of the message. If `None`, will use white.
+        duration :  int, optional
+                    Number of seconds after which to fade the message.
+
+        """
+        if message is None and hasattr(self, "_message_text"):
+            if self._message_text.parent:
+                self.overlay_scene.remove(self._message_text)
+            del self._message_text
+            return
+
+        _positions = {
+            "top-left": (-0.95, 0.95, 0),
+            "top-right": (0.95, 0.95, 0),
+            "bottom-left": (-0.95, -0.95, 0),
+            "bottom-right": (0.95, -0.95, 0),
+            "center": (0, 0, 0),
+        }
+        if position not in _positions:
+            raise ValueError(f"Unknown position: {position}")
+
+        if not hasattr(self, "_message_text"):
+            self._message_text = _visuals.text2gfx(
+                message, color="white", font_size=font_size, screen_space=True
+            )
+
+        # Make sure the text is in the scene
+        if self._message_text not in self.overlay_scene.children:
+            self.overlay_scene.add(self._message_text)
+
+        self._message_text.geometry.set_text(message)
+        self._message_text.geometry.font_size = font_size
+        self._message_text.geometry.anchor = position
+        if color is not None:
+            self._message_text.material.color = cmap.Color(color).rgba
+        self._message_text.material.opacity = 1
+        self._message_text.local.position = _positions[position]
+
+        # When do we need to start fading out?
+        if duration:
+            self._fade_out_time = time.time() + duration
+
+            def _fade_message():
+                if not hasattr(self, "_message_text"):
+                    self.remove_animation(_fade_message)
+                else:
+                    if time.time() > self._fade_out_time:
+                        # This means the text will fade fade over 1/0.02 = 50 frames
+                        self._message_text.material.opacity = max(self._message_text.material.opacity - 0.02, 0)
+
+                    if self._message_text.material.opacity <= 0:
+                        if self._message_text.parent:
+                            self.overlay_scene.remove(self._message_text)
+                        self.remove_animation(_fade_message)
+
+            self.add_animation(_fade_message)

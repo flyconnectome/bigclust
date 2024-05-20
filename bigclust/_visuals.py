@@ -1,5 +1,7 @@
 import uuid
+import cmap
 
+import pandas as pd
 import numpy as np
 import pygfx as gfx
 
@@ -12,6 +14,7 @@ def text2gfx(
     anchor="topright",
     screen_space=False,
     markdown=False,
+    pickable=False
 ):
     """Convert text to pygfx visuals.
 
@@ -53,15 +56,18 @@ def text2gfx(
     else:
         defaults["text"] = text
 
-    text = gfx.Text(
+    vis = gfx.Text(
         gfx.TextGeometry(**defaults),
-        gfx.TextMaterial(color=color),
+        gfx.TextMaterial(color=color, pick_write=pickable),
     )
-    text.local.position = position
-    return text
+    vis.local.position = position
+    vis.geometry._text = text  # track the actual text
+    return vis
 
 
-def points2gfx(points, color, size=2, marker=None, size_space="screen", pick_write=False):
+def points2gfx(
+    points, color, size=2, marker=None, size_space="screen", pick_write=False
+):
     """Convert points to pygfx visuals.
 
     Parameters
@@ -132,13 +138,10 @@ def points2gfx(points, color, size=2, marker=None, size_space="screen", pick_wri
         material_kwargs["color"] = color
 
     if marker is None:
-        material = gfx.PointsMaterial(
-            size_space=size_space, **material_kwargs
-        )
+        material = gfx.PointsMaterial(size_space=size_space, **material_kwargs)
     else:
         material = gfx.PointsMarkerMaterial(
-            marker=marker, size_space=size_space, **material_kwargs,
-            edge_width=0
+            marker=marker, size_space=size_space, **material_kwargs, edge_width=0
         )
 
     vis = gfx.Points(gfx.Geometry(positions=points, **geometry_kwargs), material)
@@ -239,8 +242,8 @@ def lines2gfx(lines, color, linewidth=1, linewidth_space="screen", dash_pattern=
             # See if we can rescue this
             if len(color) == n_points:
                 breaks = np.where(np.isnan(lines[:, 0]))[0]
-                for b in breaks:
-                    color = np.insert(color, b, np.nan, axis=0)
+                offset = np.arange(len(breaks))
+                color = np.insert(color, breaks-offset, np.nan, axis=0)
             else:
                 raise ValueError(f"Got {len(color)} colors for {n_points} line points.")
         color = color.astype(np.float32, copy=False)
@@ -264,5 +267,77 @@ def lines2gfx(lines, color, linewidth=1, linewidth_space="screen", dash_pattern=
     # Add custom attributes
     vis._object_type = "lines"
     vis._object_id = uuid.uuid4()
+
+    return vis
+
+
+def heatmap2gfx(data, width=1, height=1, clim="data", colormap="viridis"):
+    """Convert heatmap data to pygfx visuals.
+
+    Parameters
+    ----------
+    data :          (N, M) array | pd.DataFrame
+                    Data to plot.
+    clim :          tuple | str, optional
+                    Color limits. If "data", use the min/max of the data.
+                    If "datatype", use the min/max of the data type.
+    colormap :      str, optional
+                    Colormap to use.
+
+    Returns
+    -------
+    vis :           gfx.Mesh
+                    Pygfx visuals for heatmap.
+
+    """
+    if isinstance(data, pd.DataFrame):
+        data = data.values
+
+    # Find the colormap
+    colormap = cmap.Colormap(colormap)
+
+    # Find the potential min/max value of the volume
+    if isinstance(clim, str) and clim == "datatype":
+        cmin = cmax = "datatype"
+    elif isinstance(clim, str) and clim == "data":
+        cmin = cmax = "data"
+    else:
+        cmin, cmax = clim
+
+    if cmin == "datatype":
+        cmin = 0
+    elif cmin == "data":
+        cmin = data.min()
+
+    if cmax == "datatype":
+        # If float, assume that the data is normalized
+        if data.dtype.kind == "f":
+            cmax = 1
+        # Otherwise, use the maximum value of the data type
+        else:
+            cmax = np.iinfo(data.dtype).max
+    elif cmax == "data":
+        cmax = data.max()
+
+    # Normalize the data
+    data = (data - cmin) / (cmax - cmin)
+
+    # Transate values into colors using the colormap
+    colors = colormap(data.flatten())
+
+    # We need two colors for each square (top left and bottom right triangle)
+    face_colors = np.zeros((data.size * 2, 3), dtype=np.float32)
+    face_colors[::2] = face_colors[1::2] = colors[:, :3]
+
+    # Generate a plane with the appropriate number of cells
+    p = gfx.plane_geometry(
+        width, height, width_segments=data.shape[1], height_segments=data.shape[0]
+    )
+    vis = gfx.Mesh(
+        gfx.Geometry(
+            positions=p.positions.data, indices=p.indices.data, colors=face_colors
+        ),
+        gfx.MeshBasicMaterial(color_mode="face"),
+    )
 
     return vis

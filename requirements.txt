@@ -4,6 +4,7 @@ pandas
 scipy
 six
 cmap
+pyperclip
 
 #extra: all
 

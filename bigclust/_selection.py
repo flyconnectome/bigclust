@@ -54,8 +54,10 @@ class SelectionGizmo(WorldObject):
         edge_color="w",
         fill_color=None,
         modifier="Shift",
-        show_info=False,
+        line_width=1,
         line_style="dashed",
+        force_square=False,
+        show_info=False,
         debug=False,
         leave=False,
         callback_after=None,
@@ -76,10 +78,12 @@ class SelectionGizmo(WorldObject):
         # Init
         self._show_info = show_info
         self._line_style = line_style
+        self._line_width = line_width
         self._modifier = modifier
         self._edge_color = edge_color
         self._fill_color = fill_color
         self._create_elements()
+        self._force_square = force_square
         self.visible = False
         self._active = False
         self.debug = debug
@@ -121,6 +125,7 @@ class SelectionGizmo(WorldObject):
                 np.array([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
                 self._edge_color,
                 dash_pattern=self._line_style,
+                linewidth=self._line_width,
             )
             self._outline.material.opacity = self._outline_opacity
             self.add(self._outline)
@@ -267,6 +272,12 @@ class SelectionGizmo(WorldObject):
         # Set the positions of the rectangle
         world_pos = self._screen_to_world((event.x, event.y))
 
+        if self._force_square:
+            dx, dy, dz = world_pos - self._sel["start"]
+            dmin = min(abs(dx), abs(dy))
+            world_pos[0] = self._sel["start"][0] + np.sign(dx) * dmin
+            world_pos[1] = self._sel["start"][1] + np.sign(dy) * dmin
+
         if self._outline:
             # The first and the last point on the line remain on the origin
             # The second point goes to (origin, new_y), the third to (new_x, new_y)
@@ -303,6 +314,7 @@ class SelectionGizmo(WorldObject):
             self.add(point)
 
     def _update_info(self):
+        """Update the info text."""
         if not self._show_info:
             return
 
