@@ -949,7 +949,15 @@ class LabelSearch:
             print("No labels available.")
             return
 
-        self.indices = np.where(dendrogram._labels[dendrogram._leafs_order] == label)[0]
+        # Search labels
+        self.indices = self.search_labels(label)
+
+        # Search IDs if no labels were found
+        if len(self.indices) == 0:
+            if isinstance(label, int) or label.isdigit():
+                self.indices = self.search_ids(int(label))
+
+        # If still no labels found, return
         if len(self.indices) == 0:
             print(f"Label '{label}' not found.")
             return
@@ -957,6 +965,14 @@ class LabelSearch:
         # Start at the first label
         if go_to_first:
             self.next()
+
+    def search_labels(self, label):
+        """Search for a label in the dendrogram."""
+        return np.where(self.dendrogram._labels[self.dendrogram._leafs_order] == label)[0]
+
+    def search_ids(self, id):
+        """Search for an ID in the dendrogram."""
+        return np.where(self.dendrogram._ids[self.dendrogram._leafs_order] == id)[0]
 
     def __len__(self):
         return len(self.indices)
