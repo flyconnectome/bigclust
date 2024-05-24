@@ -4,7 +4,7 @@ scipy
 six
 cmap
 pyperclip
-octarine
+octarine3d
 PySide6
 scipy
 dvidtools
