@@ -1,25 +1,16 @@
-pygfx>=0.2.0
 numpy
 pandas
 scipy
 six
 cmap
 pyperclip
-
-#extra: all
-
-jupyter-rfb
+octarine
 PySide6
-ipywidgets  # ipywidget is installed with jupyter_rfb
-sidecar
+scipy
+dvidtools
+neuprint-python
+scipy
+navis
+cloud-volume
+requests
 
-#extra: docs
-
-mkdocs
-mkdocs-material[imaging]
-mkdocstrings-python
-mkdocs-minify-plugin
-mkdocs-literate-nav
-mkdocs-gen-files
-mkdocs-glightbox
-mkdocs-section-index
