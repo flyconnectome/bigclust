@@ -138,12 +138,15 @@ class Dendrogram(Figure):
         if hover_info is not None:
 
             def hover(event):
+                # Note: we could use e.g. shift-hover to show
+                # more/different info?
                 if event.type == "pointer_enter":
                     # Translate position to world coordinates
                     pos = self._screen_to_world((event.x, event.y))
 
                     # Find the closest leaf
-                    leafs = self._leaf_visuals.geometry.positions.data
+                    vis = event.current_target
+                    leafs = vis.geometry.positions.data
                     dist = np.linalg.norm(leafs[:, :2] - pos[:2], axis=1)
                     closest = np.argmin(dist)
 
@@ -155,9 +158,9 @@ class Dendrogram(Figure):
                     # N.B. there is some funny behaviour where repeatedly setting the same
                     # text will cause the bounding box to increase every time. To avoid this
                     # we have to reset the text to anything but an empty string.
-                    self._hover_widget.children[1].geometry.set_text("asfasdfasdfasdf")
+                    self._hover_widget.children[1].geometry.set_text("asdfgasdfasdfsdafsfasdfasg")
                     self._hover_widget.children[1].geometry.set_text(
-                        str(hover_info[self._dendrogram["leaves"][closest]])
+                        str(hover_info[self._leafs_order[vis._leaf_ix[closest]]])
                     )
 
                     # Scale the background to fit the text
@@ -173,9 +176,8 @@ class Dendrogram(Figure):
                 elif self._hover_widget.visible:
                     self._hover_widget.visible = False
 
-            self._leaf_visuals.add_event_handler(
-                hover, "pointer_enter", "pointer_leave"
-            )
+            for vis in self._leaf_visuals:
+                vis.add_event_handler(hover, "pointer_enter", "pointer_leave")
 
             self._hover_widget = self.make_hover_widget()
             self.scene.add(self._hover_widget)
@@ -378,6 +380,11 @@ class Dendrogram(Figure):
         for t in self._label_visuals:
             if isinstance(t, gfx.Text):
                 t.geometry.font_size = size
+
+        # The hover widget is basically set up such that the text is size 1
+        # So we just scale the whole thing accordingly when the font size changes
+        if hasattr(self, '_hover_widget'):
+            self._hover_widget.local.scale = [size, size, size]
 
     @property
     def leaf_size(self):
