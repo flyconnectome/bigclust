@@ -1,6 +1,13 @@
-from ._dendrogram import dendrogram
+from ._dendrogram import Dendrogram
+from ._heatmap import heatmap
 from ._figure import Figure
 
+from . import _visuals
+from . import _selection
+from . import _dendrogram
+from . import _heatmap
+from . import _figure
+from . import utils
 
 def test():
     import numpy as np
