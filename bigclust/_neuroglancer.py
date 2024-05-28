@@ -99,7 +99,7 @@ class NglViewer:
     def unregister(self):
         self.viewer.remove_animation(self.check_futures)
 
-    def show(self, indices, lod=-1, **kwargs):
+    def show(self, indices, lod=-1, add_as_group=False, **kwargs):
         """Add data to the viewer.
 
         Parameters
@@ -115,23 +115,28 @@ class NglViewer:
             return
 
         to_show = self.data.iloc[indices]
+        # print(f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True)
 
         # Remove those segments we don't want
-        self.viewer.remove_objects([str(x) for x in self._segments - set(to_show.id)])
-
-        # Drop those already on display
-        to_show = to_show[~to_show.id.isin(self._segments)]
+        to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
+        self.viewer.remove_objects(to_remove)
+        # print(f"Removing {len(to_remove)} neurons: ", to_remove, flush=True)
 
         # Cancel all futures we don't need anymore
         # Note: we need to use list() because we're potentially
         # modifying the dict inside the loop
         for id, future in list(self.futures.items()):
             if id not in to_show.id.values:
+                # print('Cancelling futur for', id, flush=True)
+
                 # Cancel future
                 future.cancel()
 
                 # Remove from futures
                 self.futures.pop(id, None)
+
+        # Now drop those already on display
+        to_show = to_show[~to_show.id.isin(self._segments)]
 
         for _, row in to_show.iterrows():
             # print("Loading", row.id, flush=True)
@@ -141,7 +146,12 @@ class NglViewer:
                 continue
 
             self.futures[row.id] = self.pool.submit(
-                self._load_mesh, row.id, self.volumes[row.source], lod=lod, **kwargs
+                self._load_mesh,
+                row.id,
+                self.volumes[row.source],
+                lod=lod,
+                #add_as_group=add_as_group,
+                **kwargs,
             )
             self._segments.add(row.id)
 
