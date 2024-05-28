@@ -13,4 +13,5 @@ scipy
 navis
 cloud-volume
 requests
+httpx
 
