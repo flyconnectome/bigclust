@@ -935,6 +935,24 @@ class Dendrogram(Figure):
 
         self.set_viewer_colors(colors)
 
+    def set_leaf_label(self, indices, label):
+        """Change the label of given leaf(s) in the dendrogram."""
+        # Index is expected to be in the order of dendrogram left to right
+
+        if self._labels is None:
+            raise ValueError("No labels were provided.")
+
+        if isinstance(indices, int):
+            indices = [indices]
+
+        original_ix = self._leafs_order[indices]
+        self._labels[original_ix] = label
+        for ix in indices:
+            ix_org = self._leafs_order[ix]
+            if self._label_visuals[ix_org] is not None:
+                self._label_visuals[ix_org].geometry.set_text(label)
+                self._label_visuals[ix_org].geometry._text = label
+
 
 class LabelSearch:
     """Class to search for and iterate over dendrogram labels.
