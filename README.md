@@ -198,7 +198,7 @@ python run_bigclust.py
 Use the optional `--update-labels` flag to update the labels from Clio/NeuPrint.
 
 
-#### Step 5: Using the app
+### Step 5: Using the app
 
 You should now be seeing something like this:
 
