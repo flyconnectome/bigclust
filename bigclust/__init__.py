@@ -3,6 +3,7 @@ from ._heatmap import heatmap
 from ._figure import Figure
 
 from . import _visuals
+from . import _neuroglancer
 from . import _selection
 from . import _dendrogram
 from . import _heatmap
