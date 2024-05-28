@@ -1,14 +1,18 @@
+import cmap
+import time
+
 import pygfx as gfx
 import numpy as np
 import pylinalg as la
 
+from abc import abstractmethod
 from wgpu.gui.auto import WgpuCanvas
 from wgpu.gui.offscreen import WgpuCanvas as WgpuCanvasOffscreen
 
-from . import utils
+from . import utils, _visuals
 
 
-class Figure:
+class BaseFigure:
     """Figure.
 
     Parameters
@@ -34,7 +38,6 @@ class Figure:
         offscreen=False,
         max_fps=30,
         size=None,
-        show=True,
         **kwargs,
     ):
         # Check if we're running in an IPython environment
@@ -65,21 +68,8 @@ class Figure:
         else:
             self.renderer = gfx.renderers.WgpuRenderer(self.canvas, show_fps=False)
 
-        # Set up a default scene
-        self.scene = gfx.Scene()
-        # self.scene.add(gfx.AmbientLight(intensity=1))
-
         # Set up a default background
         self._background = gfx.BackgroundMaterial((0, 0, 0))
-        self.scene.add(gfx.Background(None, self._background))
-
-        # Add camera
-        self.camera = gfx.OrthographicCamera()
-
-        # Add controller
-        self.controller = gfx.PanZoomController(
-            self.camera, register_events=self.renderer
-        )
 
         # Stats
         self.stats = gfx.Stats(self.renderer)
@@ -88,11 +78,17 @@ class Figure:
         # Setup key events
         self.key_events = {}
         self.key_events["f"] = lambda: self._toggle_fps()
+        self.key_events["c"] = lambda: self._toggle_controls()
 
         def _keydown(event):
             """Handle key presses."""
-            if event.key in self.key_events:
-                self.key_events[event.key]()
+            if not event.modifiers:
+                if event.key in self.key_events:
+                    self.key_events[event.key]()
+            else:
+                tup = (event.key, tuple(event.modifiers))
+                if tup in self.key_events:
+                    self.key_events[tup]()
 
         # Register events
         self.renderer.add_event_handler(_keydown, "key_down")
@@ -100,13 +96,13 @@ class Figure:
         # Finally, setting some variables
         self._animations = []
 
-        # This starts the animation loop
-        if show and not self._is_jupyter:
-            self.show()
-
-
+    @abstractmethod
     def _animate(self):
         """Animate the scene."""
+        pass
+
+    def _run_user_animations(self):
+        """Run user-defined animations."""
         to_remove = []
         for i, func in enumerate(self._animations):
             try:
@@ -116,14 +112,6 @@ class Figure:
                 to_remove.append(i)
         for i in to_remove[::-1]:
             self.remove_animation(i)
-
-        if self._show_fps:
-            with self.stats:
-                self.renderer.render(self.scene, self.camera, flush=False)
-            self.stats.render()
-        else:
-            self.renderer.render(self.scene, self.camera)
-        self.canvas.request_draw()
 
     @property
     def size(self):
@@ -155,28 +143,6 @@ class Figure:
     def _is_offscreen(self):
         """Check if Viewer is using offscreen canvas."""
         return isinstance(self.canvas, WgpuCanvasOffscreen)
-
-    @property
-    def x_scale(self):
-        return self.scene.local.matrix[0, 0]
-
-    @x_scale.setter
-    def x_scale(self, x):
-        assert x > 0
-        mat = np.copy(self.scene.local.matrix)
-        mat[0, 0] = x
-        self.scene.local.matrix = mat
-
-    @property
-    def y_scale(self):
-        return self.scene.local.matrix[1, 1]
-
-    @y_scale.setter
-    def y_scale(self, y):
-        assert y > 0
-        mat = np.copy(self.scene.local.matrix)
-        mat[1, 1] = y
-        self.scene.local.matrix = mat
 
     def add_animation(self, x):
         """Add animation function to the Viewer.
@@ -447,6 +413,24 @@ class Figure(BaseFigure):
 
         return is_visible
 
+    def is_visible_pos(self, pos, offset=0):
+        """Test if positions are visible to camera."""
+        assert isinstance(pos, np.ndarray)
+        assert pos.ndim == 2
+        assert pos.shape[1] == 2
+
+        top_left = self._screen_to_world((0, 0))
+        bottom_right = self._screen_to_world(self.size)
+
+        is_visible = np.ones(len(pos), dtype=bool)
+
+        is_visible[pos[:, 0] < top_left[0]] = False
+        is_visible[pos[:, 1] > top_left[1]] = False
+        is_visible[pos[:, 0] > bottom_right[0]] = False
+        is_visible[pos[:, 1] < bottom_right[1]] = False
+
+        return is_visible
+
     def _screen_to_world(self, pos):
         """Translate screen position to world coordinates."""
         viewport = gfx.Viewport.from_viewport_or_renderer(self.renderer)
@@ -473,7 +457,7 @@ class Figure(BaseFigure):
         return pos_world
 
     def show_message(
-        self, message, position="top-right", font_size=20, color=None, duration=None
+        self, message, position="top-right", font_size=20, color='w', duration=None
     ):
         """Show message on canvas.
 
