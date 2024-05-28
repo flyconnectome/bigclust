@@ -39,7 +39,7 @@ class NglViewer:
         self._neuropil_mesh = neuropil_mesh
         if neuropil_mesh:
             self.viewer.add_mesh(
-                neuropil_mesh, color=(0.8, 0.8, 0.8, 0.1), name="neuropil"
+                neuropil_mesh, color=(0.8, 0.8, 0.8, 0.05), name="neuropil"
             )
             self._centered = True
 
