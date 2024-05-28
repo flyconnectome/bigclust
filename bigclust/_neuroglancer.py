@@ -48,7 +48,7 @@ class NglViewer:
         self.pool = ThreadPoolExecutor(max_threads)
 
         # Tracks which neurons we've already loaded
-        self._segments = set()
+        self._segments = {}
 
         self.register()
 
@@ -118,7 +118,8 @@ class NglViewer:
         # print(f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True)
 
         # Remove those segments we don't want
-        to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
+        to_remove = [self._segments[x] for x in self._segments if x not in to_show.id.values]
+        # to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
         self.viewer.remove_objects(to_remove)
         # print(f"Removing {len(to_remove)} neurons: ", to_remove, flush=True)
 
@@ -145,7 +146,9 @@ class NglViewer:
             if row.id in self.futures:
                 continue
 
-            self.futures[row.id] = self.pool.submit(
+            name = f"{row.label} ({row.id})"
+
+            self.futures[(row.id, name)] = self.pool.submit(
                 self._load_mesh,
                 row.id,
                 self.volumes[row.source],
@@ -153,11 +156,11 @@ class NglViewer:
                 #add_as_group=add_as_group,
                 **kwargs,
             )
-            self._segments.add(row.id)
+            # self._segments[row.id] = name
 
     def clear(self):
         """Clear the viewer of selected segments."""
-        self.viewer.remove_objects([str(x) for x in self._segments])
+        self.viewer.remove_objects([str(x) for x in self._segments.values()])
         self._segments.clear()
 
         for future in self.futures.values():
@@ -185,7 +188,7 @@ class NglViewer:
         """Check if any futures are done."""
         has_futures = len(self.futures) > 0
 
-        for id, future in self.futures.items():
+        for (id, name), future in self.futures.items():
             if not future.done():
                 continue
             data = future.result()
@@ -194,8 +197,8 @@ class NglViewer:
             if data is None:
                 continue
 
-            self.viewer.add(data, name=str(id), center=False)
-            self._segments.add(id)
+            self.viewer.add(data, name=str(name), center=False)
+            self._segments[id] = str(name)
 
             # Center on the first neuron
             if not self._centered:
