@@ -345,10 +345,17 @@ class Dendrogram(Figure):
                 vis.material.color = (1, 1, 1, 0)
                 self._dendrogram_group.add(vis)
 
+        # Update the controls
+        if hasattr(self, "_controls"):
+            self._controls.update_ann_combo_box()
+
         if hasattr(self, "_ngl_viewer"):
             # `self._selected` is in order of the dendrogram, we need to translate it to the original order
             if len(self._selected) > 0:
-                self._ngl_viewer.show(self._leafs_order[self._selected])
+                self._ngl_viewer.show(
+                    self._leafs_order[self._selected],
+                    add_as_group=getattr(self, "_add_as_group", False),
+                )
             else:
                 self._ngl_viewer.clear()
 
