@@ -30,7 +30,8 @@ class Dendrogram(Figure):
     ----------
     linkage :       ndarray
                     The linkage matrix from `scipy.cluster.hierarchy.linkage`.
-    table :         A pandas Dataframe containing cluster metadata
+    table :         A pandas Dataframe containing cluster metadata.
+                    Must match the order of rows in the original distance matrix.
     labels :        String, optional
                     Name of column containing labels for the leaves in the dendrogram.
     clusters :      String, optional
@@ -78,9 +79,9 @@ class Dendrogram(Figure):
 
         if hover_info is not None:
             if '{' in hover_info:
-                table['hover_info'] = table.apply(hover_info.format_map, axis=1)
-                hover_info='hover_info'
-            hover_info = table[hover_info]
+                hover_info = table.apply(hover_info.format_map, axis=1)
+            else:
+                hover_info = table[hover_info]
         self._hover_info = np.asarray(hover_info) if hover_info is not None else None
         
         self._leaf_size = self.x_spacing / 10
