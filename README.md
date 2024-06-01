@@ -17,7 +17,7 @@ For now the recommended way of installing this package is this:
    pip install -e .
    ```
 
-In the future, you just need to `git pull` to update the package.
+With this setup, you can just `git pull` to update the package.
 
 ## Usage
 
@@ -186,6 +186,8 @@ if __name__ == "__main__":
     run()
 ```
 
+*Make sure to fill in the DVID `SOURCE_URL` and adjust the filepaths if necessary.*
+
 ### Step 4: Fire up `bigclust`
 
 Make sure you have all the data artifacts (`linkage.npy`, etc.) in the same folder as
@@ -210,6 +212,7 @@ Dendrogram controls:
 - scroll up/down to zoom in/out
 - mouse drag to move around
 - shift+drag to select neurons (they should appear in the viewer)
+- `escape` or double-click to deselect
 - hover over a dendrogram leaf to show extra information (see `hover_info` parameter)
 
 3D viewer controls:
