@@ -30,19 +30,21 @@ class Dendrogram(Figure):
     ----------
     linkage :       ndarray
                     The linkage matrix from `scipy.cluster.hierarchy.linkage`.
-    labels :        list, optional
-                    Labels for the leafs in the dendrogram.
-    clusters :      list, optional
-                    List of clusters. Must contain one label for each leaf in the dendrogram.
+    table :         A pandas Dataframe containing cluster metadata
+    labels :        String, optional
+                    Name of column containing labels for the leaves in the dendrogram.
+    clusters :      String, optional
+                    Name of column containings labels for each leaf in the dendrogram.
                     Order of clusters must match the order of labels in the original distance matrix.
     cluster_colors : dict | str, optional
                     Dictionary of cluster colors. If None, a default palette is used. If string,
                     must be the name of a color palette from the `cmap` module.
-    hover_info :    list, optional
-                    List of hover info for each leaf in the dendrogram. If given, hovering over a leaf
-                    will show the corresponding info.
-    leaf_types :    list, optional
-                    A list of types for each leaf. Each unique type will be assigned a different marker.
+    hover_info :    String optional
+                    Either the name of a column containing or hover information or a format string that
+                    can reference multiple columns. Hover info must exist for each leaf in the dendrogram. 
+                    If given, hovering over a leaf will show the corresponding info.
+    leaf_types :    String optional
+                    Column name specifying types for each leaf. Each unique type will be assigned a different marker.
     **kwargs :      dict, optional
                     Additional keyword arguments are passed to the `Figure` class.
 
@@ -55,25 +57,32 @@ class Dendrogram(Figure):
     def __init__(
         self,
         linkage,
-        labels=None,
-        ids=None,
-        clusters=None,
+        table,
+        labels='label',
+        ids='id',
+        clusters='cluster',
         cluster_colors=None,
-        hover_info=None,
-        leaf_types=None,
+        hover_info='hover_info',
+        leaf_types='dataset',
         **kwargs,
     ):
         super().__init__(size=(1000, 400), **kwargs)
 
         self._linkage = np.asarray(linkage)
-        self._labels = np.asarray(labels) if labels is not None else None
-        self._ids = np.asarray(ids) if ids is not None else None
-        self._clusters = np.asarray(clusters) if clusters is not None else None
-        self._hover_info = np.asarray(hover_info) if hover_info is not None else None
-        self._leaf_types = np.asarray(leaf_types) if leaf_types is not None else None
+        self._labels = np.asarray(table[labels]) if labels is not None else None
+        self._ids = np.asarray(table[ids]) if ids is not None else None
+        self._clusters = np.asarray(table[clusters]) if clusters is not None else None
+        self._leaf_types = np.asarray(table[leaf_types]) if leaf_types is not None else None
         self._rotate_labels = True
         self._selected = None
 
+        if hover_info is not None:
+            if '{' in hover_info:
+                table['hover_info'] = table.apply(hover_info.format_map, axis=1)
+                hover_info='hover_info'
+            hover_info = table[hover_info]
+        self._hover_info = np.asarray(hover_info) if hover_info is not None else None
+        
         self._leaf_size = self.x_spacing / 10
         self._font_size = 2
         self.label_vis_limit = 200  # number of labels shown at once before hiding all
