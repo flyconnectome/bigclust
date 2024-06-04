@@ -23,9 +23,9 @@ class NglViewer:
 
     """
 
-    def __init__(self, data, neuropil_mesh=None, max_threads=20):
+    def __init__(self, data, neuropil_mesh=None, debug=False, max_threads=20):
+        self.debug = debug
         self.data = data.rename({"segment_id": "id"}, axis=1).astype({"id": int})
-
         self.set_default_colors()
 
         # Parse cloudvolumes
@@ -99,6 +99,11 @@ class NglViewer:
     def unregister(self):
         self.viewer.remove_animation(self.check_futures)
 
+    def report(self, *args, **kwargs):
+        """Print a message if in debug mode."""
+        if self.debug:
+            print(*args, **kwargs)
+
     def show(self, indices, lod=-1, add_as_group=False, **kwargs):
         """Add data to the viewer.
 
@@ -115,20 +120,20 @@ class NglViewer:
             return
 
         to_show = self.data.iloc[indices]
-        # print(f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True)
+        self.report(f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True)
 
         # Remove those segments we don't want
         to_remove = [self._segments[x] for x in self._segments if x not in to_show.id.values]
         # to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
         self.viewer.remove_objects(to_remove)
-        # print(f"Removing {len(to_remove)} neurons: ", to_remove, flush=True)
+        self.report(f"Removing {len(to_remove)} neurons: ", to_remove, flush=True)
 
         # Cancel all futures we don't need anymore
         # Note: we need to use list() because we're potentially
         # modifying the dict inside the loop
-        for id, future in list(self.futures.items()):
+        for (id, _), future in list(self.futures.items()):
             if id not in to_show.id.values:
-                # print('Cancelling futur for', id, flush=True)
+                self.report('Cancelling futur for', id, flush=True)
 
                 # Cancel future
                 future.cancel()
@@ -140,7 +145,7 @@ class NglViewer:
         to_show = to_show[~to_show.id.isin(self._segments)]
 
         for _, row in to_show.iterrows():
-            # print("Loading", row.id, flush=True)
+            self.report("Loading", row.id, flush=True)
 
             # Skip if we're already loading this segment
             if row.id in self.futures:
@@ -195,8 +200,10 @@ class NglViewer:
 
             # If there is no mesh, skip
             if data is None:
+                self.report(f"Failed to load {id}", flush=True)
                 continue
 
+            self.report(f"Loaded {id}", flush=True)
             self.viewer.add(data, name=str(name), center=False)
             self._segments[id] = str(name)
 
