@@ -147,11 +147,12 @@ if __name__ == "__main__":
     # Now we will instantiate the dendrogram
     fig = bc.Dendrogram(
         Z,
-        labels=table.dend_label,
-        leaf_types=table.dataset,
-        clusters=table.cluster,
-        ids=table.id,
-        hover_info=table.hover_info,
+        table=table,
+        labels='dend_label',
+        leaf_types='dataset',
+        clusters='cluster',
+        ids='id',
+        hover_info='hover_info',
     )
     fig.show()
 
