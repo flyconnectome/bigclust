@@ -1,3 +1,4 @@
+import re
 import math
 import cmap
 
@@ -368,6 +369,13 @@ class Dendrogram(Figure):
                 )
             else:
                 self._ngl_viewer.clear()
+
+        if hasattr(self, "_synced_widgets"):
+            for w in self._synced_widgets:
+                try:
+                    w.select(self._leafs_order[self._selected])
+                except BaseException as e:
+                    print(f"Failed to sync widget {w}:\n", e)
 
     @property
     def xlim(self):
@@ -894,6 +902,28 @@ class Dendrogram(Figure):
     def sync_viewer(self, viewer):
         """Sync the dendrogram with a neuroglancer viewer."""
         self._ngl_viewer = viewer
+
+    def sync_widget(self, widget):
+        """Connect a widget to the dendrogram.
+
+        Parameters
+        ----------
+        widget
+                The widget to sync. Must implement a `.select()` method
+                that takes a list of IDs to select.
+
+        """
+        # Note to self:
+        # We should re-implement this using an emit signal and leaving
+        # it to the widget to update itself.
+        assert hasattr(widget, "select") and callable(
+            widget.select
+        ), "Widget must have a `select` method that takes a list of IDs to select."
+
+        if not hasattr(self, "_synced_widgets"):
+            self._synced_widgets = []
+
+        self._synced_widgets.append(widget)
 
     def set_viewer_colors(self, colors):
         """Set the colors for the neuroglancer viewer.
