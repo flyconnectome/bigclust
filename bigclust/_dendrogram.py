@@ -802,7 +802,9 @@ class Dendrogram(Figure):
             else:
                 self.show_controls()
 
-    def find_label(self, label, highlight=True, go_to_first=True, verbose=True):
+    def find_label(
+        self, label, regex=False, highlight=True, go_to_first=True, verbose=True
+    ):
         """Find and center the dendrogram on a given label.
 
         Parameters
@@ -822,10 +824,10 @@ class Dendrogram(Figure):
             An object that can be used to iterate over the found labels.
 
         """
-        if highlight:
-            self.highlight_leafs(leafs=label)
+        ls = LabelSearch(self, label, go_to_first=go_to_first, regex=regex)
 
-        ls = LabelSearch(self, label, go_to_first=go_to_first)
+        if highlight:
+            self.highlight_leafs(ls.indices)
 
         if verbose:
             self.show_message(f"Found {len(ls)} occurrences of '{label}'", duration=3)
@@ -869,6 +871,16 @@ class Dendrogram(Figure):
                     dend_ix = self._leafs_order_inv[i]
                     self.show_labels(dend_ix)
                 visual = self._label_visuals[i]
+
+                visual.material._original_color = visual.material.color
+                visual.material.color = color
+        elif isinstance(leafs, (list, np.ndarray)):
+            for ix in leafs:
+                # Index in the original order
+                ix_org = self._leafs_order[ix]
+                if self._label_visuals[ix_org] is None:
+                    self.show_labels(ix)
+                visual = self._label_visuals[ix_org]
 
                 visual.material._original_color = visual.material.color
                 visual.material.color = color
@@ -978,13 +990,16 @@ class LabelSearch:
     go_to_first :   bool, optional
                     Whether to go to the first occurrence of the label at
                     initialization.
+    regex :         bool, optional
+                    Whether to interpret the label as a regular expression.
 
     """
 
-    def __init__(self, dendrogram, label, rotate=True, go_to_first=True):
+    def __init__(self, dendrogram, label, rotate=True, go_to_first=True, regex=False):
         self.dendrogram = dendrogram
         self.label = label
         self._ix = 0
+        self.regex = regex
         self._rotate = rotate
 
         if dendrogram._labels is None:
@@ -996,7 +1011,7 @@ class LabelSearch:
 
         # Search IDs if no labels were found
         if len(self.indices) == 0:
-            if isinstance(label, int) or label.isdigit():
+            if isinstance(label, Number) or label.isdigit():
                 self.indices = self.search_ids(int(label))
 
         # If still no labels found, return
@@ -1010,7 +1025,15 @@ class LabelSearch:
 
     def search_labels(self, label):
         """Search for a label in the dendrogram."""
-        return np.where(self.dendrogram._labels[self.dendrogram._leafs_order] == label)[0]
+        if not self.regex:
+            return np.where(self.dendrogram._labels_ordered == label)[0]
+        else:
+            return np.where(
+                [
+                    re.search(str(label), l) is not None
+                    for l in self.dendrogram._labels_ordered
+                ]
+            )[0]
 
     def search_ids(self, id):
         """Search for an ID in the dendrogram."""
