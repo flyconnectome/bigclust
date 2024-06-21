@@ -179,14 +179,18 @@ class DendrogramControls(QtWidgets.QWidget):
     def build_annotation_gui(self):
         # Add buttons to push annotations
         self.push_ann_button = QtWidgets.QPushButton("Push annotations")
-        self.push_ann_button.setToolTip("Push the current annotation to Clio")
+        self.push_ann_button.setToolTip("Push the current annotation to selected fields")
         self.push_ann_button.clicked.connect(self.push_annotation)
         self.tab2_layout.addWidget(self.push_ann_button)
 
         self.ann_combo_box = QtWidgets.QComboBox()
         self.ann_combo_box.setEditable(True)
-
         self.tab2_layout.addWidget(self.ann_combo_box)
+
+        self.clear_ann_button = QtWidgets.QPushButton("Clear annotations")
+        self.clear_ann_button.setToolTip("Clear the current annotations")
+        self.clear_ann_button.clicked.connect(self.clear_annotation)
+        self.tab2_layout.addWidget(self.clear_ann_button)
 
         # Add checkboxes
         self.set_label = QtWidgets.QLabel("Which fields to set:")
@@ -339,6 +343,54 @@ class DendrogramControls(QtWidgets.QWidget):
         # if len(rootids) and self.set_mcns_type_check.isChecked():
         #     print("  ", rootids)
 
+    def clear_annotation(self):
+        """Clear the currently selected fields."""
+        if not any(
+            (
+                self.set_flywire_check.isChecked(),
+                self.set_type_check.isChecked(),
+                self.set_mcns_type_check.isChecked(),
+            )
+        ):
+            self.figure.show_message("No fields to clear", color="red", duration=2)
+            return
+
+        selected_ids = self.figure.selected_ids
+        if selected_ids is None:
+            self.figure.show_message("No neurons selected", color="red", duration=2)
+            return
+
+        # Get the male CNS IDs
+        from fafbseg import flywire
+
+        is_root = flywire.is_valid_root(selected_ids)
+        bodyids = selected_ids[~is_root]
+        rootids = selected_ids[is_root]
+
+        # Get the annotation
+        import clio
+
+        global CLIO_CLIENT
+        if CLIO_CLIENT is None:
+            CLIO_CLIENT = clio.Client(dataset="CNS")
+
+        import ftu
+
+        # Submit the annotations
+        self.futures[uuid.uuid4()] = self.pool.submit(
+            _clear_annotations,
+            bodyids=bodyids
+            if self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
+            else None,
+            rootids=rootids if self.set_mcns_type_check.isChecked() else None,
+            clear_flywire=self.set_flywire_check.isChecked(),
+            clear_type=self.set_type_check.isChecked(),
+            clear_mcns_type=self.set_mcns_type_check.isChecked(),
+            clio=clio,  #  pass the module
+            ftu=ftu,  #  pass the module
+            figure=self.figure,
+        )
+
     def set_add_group(self):
         """Set whether to add neurons as group when selected."""
         self.figure._add_as_group = self.add_group_check.isChecked()
@@ -456,6 +508,70 @@ def _push_annotations(
             if set_mcns_type and rootids is not None:
                 figure.set_leaf_label(
                     figure.selected[np.isin(figure.selected_ids, rootids)], f"{label}(!)"
+                )
+
+            # Show the message
+            figure.show_message(msg, color="lightgreen", duration=2)
+    except:
+        if figure:
+            figure.show_message("Error pushing annotations (see console)", color="red", duration=2)
+        raise
+
+
+def _clear_annotations(
+    bodyids,
+    rootids,
+    clio,
+    ftu,
+    clear_flywire=True,
+    clear_type=True,
+    clear_mcns_type=True,
+    figure=None,
+):
+    """Push the current annotation to Clio."""
+    cleared_fields = []
+    cleared_ids = []
+    try:
+        if bodyids is not None:
+            if clear_flywire and clear_type:
+                clio.set_fields(bodyids, flywire_type=None, type=None)
+                cleared_fields += ["`type`", "`flywire_type`"]
+            elif clear_flywire:
+                clio.set_fields(bodyids, flywire_type=None)
+                cleared_fields.append("`flywire_type`")
+            elif clear_type:
+                clio.set_fields(bodyids, type=None)
+                cleared_fields.append("`type`")
+            cleared_ids.append(f"{len(bodyids)} maleCNS")
+
+        if clear_mcns_type and rootids is not None:
+            ftu.info.update_fields(
+                rootids,
+                malecns_type=None,
+                malecns_type_source=None,
+                id_col="root_783",
+                dry_run=False,
+            )
+            cleared_fields.append("`malecns_type`")
+            cleared_ids.append(f"{len(rootids)} FlyWire")
+
+        msg = f"Cleared {', '.join(cleared_fields)} for {' and '.join(cleared_ids)} neuron(s)"
+
+        print(f"{msg}:")
+        if bodyids is not None and len(bodyids) and (clear_flywire or clear_type):
+            print("  ", bodyids)
+        if rootids is not None and len(rootids) and clear_mcns_type:
+            print("  ", rootids)
+
+        if figure:
+            # Update the labels in the dendrogram
+            if (clear_flywire or clear_type) and bodyids is not None:
+                figure.set_leaf_label(
+                    figure.selected[np.isin(figure.selected_ids, bodyids)], "(cleared)(!)"
+                )
+            if clear_mcns_type and rootids is not None:
+                figure.set_leaf_label(
+                    figure.selected[np.isin(figure.selected_ids, rootids)], "(cleared)(!)"
                 )
 
             # Show the message
