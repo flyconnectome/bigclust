@@ -1,6 +1,6 @@
 # BigClust
 
-`BigClust` is a set of tools for interactively exploring large clusterings via dendrograms or heatmaps.
+`bigclust` is a set of tools for interactively exploring clusterings via dendrograms with several 100k leafs.
 For that we are making use of the `pygfx` WGPU-based rendering engine.
 
 ## Installation
@@ -21,13 +21,18 @@ With this setup, you can just `git pull` to update the package.
 
 ## Usage
 
-I imagine the typical usage will be to run a big one-off
-clustering on a remote cluster node and then
+I imagine the typical usage will be to run a big one-off clustering on a remote cluster node and then
 load that clustering into `bigclust` on a local machine. Therefore, `bigclust` is designed to work with data artefacts
-rather than run the clustering itself.
+rather than running the clustering itself.
 
-Here, we will illustrate the usage with a simple toy example using the
-[`cocoa`](https://github.com/flyconnectome/cocoa) package:
+Minimally, you will need:
+1. A [linkage](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html) describing the dendrogram.
+2. A pandas DataFrame with meta data for the original observations.
+
+We are using `bigclust` for clustering large number of neurons. Therefore `bigclust` also provides a Neuroglancer-like widget to explore
+morphology and a connectivity widget.
+
+Let's illustrate the usage with a simple toy example using the [`cocoa`](https://github.com/flyconnectome/cocoa) package for comparative connectomic analyses:
 
 #### Step 1: Run a co-clustering
 
@@ -35,41 +40,31 @@ Here, we will illustrate the usage with a simple toy example using the
 import cocoa as cc
 import numpy as np
 
-# Co-cluster two cell types in the male CNS left vs right
-cl = cc.generate_clustering(mcns=['DA1_lPN', 'DA2_lPN']).compile()
+# Co-cluster two cell types in FlyWire left vs right
+cl = cc.generate_clustering(fw=['DA1_lPN', 'DA2_lPN']).compile()
 ```
 
 ### Step 2: Get the data artifacts
 
 ```python
-# Save the neuron IDs as they appear in the distance matrix
-np.save("dist_index.npy", cl.dists_.index, allow_pickle=False)
-
-# Get the linkage
+# Get the linkage (this is a simple scipy linkage)
 Z = cl.get_linkage(method='ward')
 np.save("linkage.npy", Z, allow_pickle=False)
 
-# Prepare a table with details we can use for
+# Prepare a table with details we can use as e.g. labels in the dendrogram
 t = cl.to_table(cl.extract_homogeneous_clusters(max_dist=2, min_dist=.1, linkage=Z), linkage=Z)
 
-# This is optional:
-# Which neurons have a mapping that was used to co-cluster?
-mappings = cc.GraphMapper()._mappings[('MaleCNS',)]
-t['label_used'] = t.id.isin(mappings)
-t['mapping'] = t.id.map(mappings)
-
-t.to_feather("cosine_table.feather")
+# Save and make sure the order is the same as in our distance matrix
+t.set_index("id").reindex(index).reset_index(drop=False).to_feather("cosine_table.feather")
 ```
 
 _*feel free to use more sensible file names_
 
 ### Step 3: Write a start-up script
 
-Open a new python script - call it e.g. `run_bigclust.py`:
+Open a new python script - name it e.g. `run_bigclust.py`:
 
 ```python
-import sys
-
 import pandas as pd
 import numpy as np
 import trimesh as tm
@@ -88,57 +83,15 @@ if __name__ == "__main__":
     # Load the linkage matrix
     Z = np.load("linkage.npy")
 
-    # Load the index of the distance matrix (i.e. the neuron IDs)
-    # (we need that so we know which neuron is which leaf in the matrix)
-    index = np.load("dist_index.npy")
+    # This is the table with the neuron information, including the clusters
+    table = pd.read_feather("cosine_table.feather")
 
-    # This is the table with the neuron information, including the homogeneous clusters
-    table = (
-        pd.read_feather("cosine_table.feather")
-        # This shouldn't be necessary but just in case:
-        # make sure the table is in the same order as the linkage matrix
-        .set_index("id")
-        .reindex(index)
-    ).reset_index(drop=False)
-
-    # Update labels if this was requested via the --update-labels flag
-    # Note: this will require having set the appropriate credentials
-    # (see https://github.com/flyconnectome/cocoa for details)
-    if update_labels:
-        import cocoa as cc
-
-        mcns = cc.MaleCNS()
-        mcns_types = mcns.get_labels(None, backfill=True)
-        table["label"] = table.id.map(mcns_types).values
-
-    # Here we define the actual leaf labels in the dendrogram
-    table["dend_label"] = table.label.fillna("untyped")
-
-    # Add cell type counts to the label as "{label}({count})"
-    ct_counts = table.label.value_counts()
-    table.loc[table.label.isin(ct_counts.index), "dend_label"] += (
-        "("
-        + table.loc[table.label.isin(ct_counts.index)].label.map(ct_counts).astype(str)
-        + ")"
-    )
-
-    # Add asterisk for labels that were used in the co-clustering
-    table.loc[table.label_used, "dend_label"] = (
-        table.loc[table.label_used, "dend_label"] + "*"
-    )
-
-    # Here we define the hover information for the dendrogram
-    # (hover over the leafs to show)
-    table["hover_info"] = table.id.astype(str) + "\n" + table.mapping
-
-    # Add source information -> we need this to load the neuron meshes in the viewer
-    # You can get that info by going to e.g. Clio or NeuPrint and checking the segmentation
-    # "source" in the neuroglancer
-    table["source"] = "dvid://SOURCE_URL"
+    # Add source information -> we need this to load the neuron meshes in the Neuroglancer viewer
+    table["source"] = "precomputed://gs://flywire_v141_m783"
 
     # Here we define the default colors for the neurons
     table["color"] = table.dataset.map(
-        {"McnsR": "cyan", "McnsL": "lightskyblue"}
+        {"FwR": "cyan", "FWL": "lightskyblue"}
     )
 
     print(" Done.", flush=True)
@@ -148,11 +101,10 @@ if __name__ == "__main__":
     fig = bc.Dendrogram(
         Z,
         table=table,
-        labels='dend_label',
+        labels='label',
         leaf_types='dataset',
         clusters='cluster',
         ids='id',
-        hover_info='hover_info',
     )
     fig.show()
 
@@ -166,11 +118,11 @@ if __name__ == "__main__":
 
     print(".", flush=True, end="")
 
-    # Load the neuropil mesh for the maleCNS from Github
+    # Load the neuropil mesh for FlyWire from Github
     # We will add this to the viewer to make navigation easier
-    # You could download and put this locally if you want to
+    # You could download and store it locally if you want to
     neuropil_mesh = tm.load_remote(
-        "https://github.com/navis-org/navis-flybrains/raw/main/flybrains/meshes/JRCFIB2022M.ply"
+        "https://github.com/navis-org/navis-flybrains/raw/main/flybrains/meshes/FLYWIRE.ply"
     )
 
     # Instantiate the viewer
@@ -184,21 +136,20 @@ if __name__ == "__main__":
     print(" Done!", flush=True)
 
     # Run the app
+    # Note: this is only necessary if we're running bigclust from a script
     run()
 ```
 
-*Make sure to fill in the DVID `SOURCE_URL` and adjust the filepaths if necessary.*
+*Make sure to adjust the filepaths if necessary.*
 
 ### Step 4: Fire up `bigclust`
 
-Make sure you have all the data artifacts (`linkage.npy`, etc.) in the same folder as
+Make sure you have all the data artifacts (`linkage.npy` and `cosine_table.feather`) in the same folder as
 the `run_bigclust.py` script. Then:
 
 ```bash
 python run_bigclust.py
 ```
-
-Use the optional `--update-labels` flag to update the labels from Clio/NeuPrint.
 
 
 ### Step 5: Using the app
