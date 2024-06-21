@@ -3,6 +3,12 @@
 `bigclust` is a set of tools for interactively exploring clusterings via dendrograms with several 100k leafs.
 For that we are making use of the `pygfx` WGPU-based rendering engine.
 
+
+
+https://github.com/flyconnectome/bigclust/assets/7161148/f1a0ddcb-522d-4655-ad85-158a810348e8
+
+
+
 ## Installation
 
 For now the recommended way of installing this package is this:
