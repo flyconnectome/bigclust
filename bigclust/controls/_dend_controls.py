@@ -1,4 +1,5 @@
 import re
+import os
 import uuid
 import pyperclip
 
@@ -49,6 +50,10 @@ class DendrogramControls(QtWidgets.QWidget):
 
         self.tabs.addTab(self.tab1, "General")
         self.tabs.addTab(self.tab2, "Annotation")
+
+        # Deactivate tab
+        if not os.environ.get("BC_ANNOTATION", "0") == "1":
+            self.tabs.setTabEnabled(1, False)
 
         # Build gui
         self.build_control_gui()

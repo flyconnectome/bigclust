@@ -27,9 +27,12 @@ TODOs:
 class Dendrogram(Figure):
     """A dendrogram plot.
 
+    Notes:
+    - the annotation tab in the control panel is by default disabled; set environment variable `BC_ANNOTATION=1` to enable
+
     Parameters
     ----------
-    linkage :       ndarray
+    linkage :       numpy array
                     The linkage matrix from `scipy.cluster.hierarchy.linkage`.
     table :         A pandas Dataframe containing cluster metadata.
                     Must match the order of rows in the original distance matrix.
@@ -43,7 +46,7 @@ class Dendrogram(Figure):
                     must be the name of a color palette from the `cmap` module.
     hover_info :    String optional
                     Either the name of a column containing or hover information or a format string that
-                    can reference multiple columns. Hover info must exist for each leaf in the dendrogram. 
+                    can reference multiple columns. Hover info must exist for each leaf in the dendrogram.
                     If given, hovering over a leaf will show the corresponding info.
     leaf_types :    String optional
                     Column name specifying types for each leaf. Each unique type will be assigned a different marker.
