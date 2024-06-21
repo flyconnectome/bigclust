@@ -34,7 +34,7 @@ morphology and a connectivity widget.
 
 Let's illustrate the usage with a simple toy example using the [`cocoa`](https://github.com/flyconnectome/cocoa) package for comparative connectomic analyses:
 
-#### Step 1: Run a co-clustering
+### Step 1: Run a co-clustering
 
 ```python
 import cocoa as cc
