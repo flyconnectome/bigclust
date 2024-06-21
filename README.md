@@ -75,9 +75,6 @@ from bigclust._neuroglancer import NglViewer
 
 
 if __name__ == "__main__":
-    # Parse arguments
-    update_labels = "--update-labels" in sys.argv
-
     print("Loading data...", flush=True, end="")
 
     # Load the linkage matrix
