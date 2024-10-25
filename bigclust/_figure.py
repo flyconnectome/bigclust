@@ -201,7 +201,8 @@ class BaseFigure:
             return
         # In terminal we can just show the window
         elif not self._is_jupyter:
-            self.canvas.show()
+            if hasattr(self.canvas, "show"):
+                self.canvas.show()
         # For Jupyter we need to wrap the canvas in a widget
         else:
             # if not hasattr(self, 'widget'):
