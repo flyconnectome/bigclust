@@ -1,9 +1,10 @@
-import pyperclip
+import cmap
 
 import numpy as np
 import pandas as pd
 
-from PySide6 import QtWidgets, QtCore
+from numbers import Number
+from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtCore import Qt
 from scipy.spatial.distance import pdist, squareform
 from scipy.cluster.hierarchy import linkage, leaves_list
@@ -25,20 +26,34 @@ class TableModel(QtCore.QAbstractTableModel):
         self._col_filt = None
         self._upstream = True
         self._downstream = True
+        self._color_cells = True
+        self._normalize = False
+        self.colormap = cmap.Colormap('matlab:cool', interpolation='linear')
 
     def data(self, index, role):
         if role == Qt.DisplayRole:
-            # See below for the nested-list data structure.
-            # .row() indexes into the outer list,
-            # .column() indexes into the sub-list)
+            # Get the current value
             value = self._view.values[index.row(), index.column()]
             if self._hide_zeros and value == 0:
                 return ""
             else:
+                if self._normalize:
+                    return f"{value:.3f}"
                 return str(value)
         elif role == Qt.TextAlignmentRole:
             # Center the text in both vertical and horizontal directions
             return Qt.AlignCenter + Qt.AlignVCenter
+        elif role == Qt.ItemDataRole.BackgroundRole and self._color_cells:
+            # Get the current value
+            value = self._view.values[index.row(), index.column()]
+            if isinstance(value, Number) and value > 0:
+                # Normalise to range 0 - 1
+                value_norm = value / self._view.values.max()
+
+                # Generate a color
+                c = self.colormap(value_norm).hex
+
+                return QtGui.QColor(c)
 
     def rowCount(self, index):
         # The length of the outer list.
@@ -61,9 +76,9 @@ class TableModel(QtCore.QAbstractTableModel):
     def select_rows(self, indices, drop_empty_cols=True, use_index=True):
         """Select rows by indices."""
         if use_index:
-            self._view = self._data.loc[indices]
+            self._view = _view_temp = self._data.loc[indices]
         else:
-            self._view = self._data.iloc[indices]
+            self._view = _view_temp = self._data.iloc[indices]
 
         if isinstance(self._view.columns, pd.MultiIndex):
             if not self._upstream:
@@ -80,6 +95,20 @@ class TableModel(QtCore.QAbstractTableModel):
         # Apply column filter
         if self._col_filt:
             self._view = self._view.filter(regex=self._col_filt, axis=1)
+
+        # Apply normalisation
+        if self._normalize:
+            # Normalise up- and downstream separately
+            if isinstance(self._view.columns, pd.MultiIndex):
+                for d in ("upstream", "downstream"):
+                    this_level = self._view.columns.get_level_values(0) == d
+                    this_level_full = _view_temp.columns.get_level_values(0) == d
+                    self._view.loc[:, this_level] = (
+                        self._view.loc[:, this_level]
+                        / _view_temp.loc[:, this_level_full].values.sum(axis=1)[:, None]
+                    )
+            else:
+                self._view = self._view / _view_temp.values.sum(axis=1)[:, None]
 
         # Apply column sort
         if self._col_sort not in (None, "No sort") and self._view.shape[1] > 1:
@@ -237,9 +266,16 @@ class ConnectivityTable(QtWidgets.QWidget):
         # Start a new row in the layout
         self._control_layout2 = QtWidgets.QHBoxLayout()
         self._layout.addLayout(self._control_layout2)
-        self._control_layout2.addWidget(QtWidgets.QLabel("Columns:"))
+
+        self._normalize = QtWidgets.QCheckBox("Normalize")
+        self._normalize.setChecked(False)
+        self._normalize.setToolTip("Normalize synapse counts")
+        self._normalize.stateChanged.connect(self.update_normalize)
+        self._control_layout.addWidget(self._normalize)
 
         # Add dropdown selection for column sorting
+        self._control_layout2.addWidget(QtWidgets.QLabel("Columns:"))
+
         self._sort_dropdown = QtWidgets.QComboBox()
         self._sort_dropdown.addItem("No sort")
         self._sort_dropdown.addItem("By synapse count")
@@ -277,6 +313,11 @@ class ConnectivityTable(QtWidgets.QWidget):
         self._model.set_direction(
             upstream=self._upstream.isChecked(), downstream=self._downstream.isChecked()
         )
+
+    def update_normalize(self):
+        """Update the normalization of the table."""
+        self._model._normalize = self._normalize.isChecked()
+        self._model.select_rows(self._model._view.index)
 
     def filter_columns(self):
         """Filter the columns based on the search field."""
