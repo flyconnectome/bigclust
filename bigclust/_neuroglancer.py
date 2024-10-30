@@ -4,9 +4,11 @@ import requests
 import octarine as oc
 import cloudvolume as cv
 import dvid as dv
+import nglscenes as ngl
 
 import navis
 
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -23,7 +25,14 @@ class NglViewer:
 
     """
 
-    def __init__(self, data, neuropil_mesh=None, debug=False, max_threads=20):
+    def __init__(
+        self,
+        data,
+        neuropil_mesh=None,
+        neuropil_source=None,
+        debug=False,
+        max_threads=20,
+    ):
         self.debug = debug
         self.data = data.rename({"segment_id": "id"}, axis=1).astype({"id": int})
         self.set_default_colors()
@@ -37,6 +46,7 @@ class NglViewer:
         self._centered = False
 
         self._neuropil_mesh = neuropil_mesh
+        self._neuropil_source = neuropil_source
         if neuropil_mesh:
             self.viewer.add_mesh(
                 neuropil_mesh, color=(0.8, 0.8, 0.8, 0.05), name="neuropil"
@@ -116,14 +126,19 @@ class NglViewer:
 
         """
         if not len(indices):
+            self.report("Clearing viewer", flush=True)
             self.clear()
             return
 
         to_show = self.data.iloc[indices]
-        self.report(f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True)
+        self.report(
+            f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True
+        )
 
         # Remove those segments we don't want
-        to_remove = [self._segments[x] for x in self._segments if x not in to_show.id.values]
+        to_remove = [
+            self._segments[x] for x in self._segments if x not in to_show.id.values
+        ]
         # to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
         self.viewer.remove_objects(to_remove)
         self.report(f"Removing {len(to_remove)} neurons: ", to_remove, flush=True)
@@ -133,7 +148,7 @@ class NglViewer:
         # modifying the dict inside the loop
         for (id, _), future in list(self.futures.items()):
             if id not in to_show.id.values:
-                self.report('Cancelling futur for', id, flush=True)
+                self.report("Cancelling future for", id, flush=True)
 
                 # Cancel future
                 future.cancel()
@@ -158,7 +173,7 @@ class NglViewer:
                 row.id,
                 self.volumes[row.source],
                 lod=lod,
-                #add_as_group=add_as_group,
+                # add_as_group=add_as_group,
                 **kwargs,
             )
             # self._segments[row.id] = name
@@ -173,19 +188,99 @@ class NglViewer:
 
         self.futures.clear()
 
+    def neuroglancer_scene(self):
+        """Generate neuroglancer scene for the current state."""
+        # Go over all visible segments and get their layers
+        ids_per_layer = {source: [] for source in self.data.source.unique()}
+        id2source = self.data.set_index("id").source.to_dict()
+
+        # Add already loaded IDs
+        for id, name in self._segments.items():
+            ids_per_layer[id2source[id]].append(id)
+
+        # Add IDs that are currently being loaded
+        for (id, name), future in self.futures.items():
+            ids_per_layer[id2source[id]].append(id)
+
+        # Generate the scene
+        s = ngl.Scene()
+        s["layout"] = "3d"
+        s["dimensions"] = {"x": [1e-9, "m"], "y": [1e-9, "m"], "z": [1e-9, "m"]}
+        s["position"] = [385865.5, 248967.5, 123749.5]  # Default position
+        s["projectionScale"] = 495090.6406803968
+
+        # Sort the layers such that the DVID source comes first
+        # (this is a hack to make sure neuroglancer has bounds to work with)
+        sources = sorted(
+            ids_per_layer.keys(), key=lambda x: x.startswith("dvid://"), reverse=True
+        )
+
+        for source in sources:
+            ids = ids_per_layer[source]
+            # Translate "{node}:master" to the actual master node
+            if source.startswith("dvid://") and ":master" in source:
+                url = source.replace("dvid://", "")
+                url = url.split("?")[0]
+                server, node = url.replace("https://", "").split("/")[:2]
+                # Get the master node
+                master_node = get_master_node(
+                    node.replace(":master", ""), f"https://{server}"
+                )
+                # Replace the node with the master node
+                source = source.replace(node, master_node)
+
+            layer = ngl.SegmentationLayer(source)
+            layer["segments"] = ids
+            layer["source"] = {
+                "url": source,
+                "subsources": {
+                    "default": True,
+                    "meshes": True,
+                    "bounds": False,
+                    "skeletons": False,
+                },
+            }
+
+            # Set colors
+            layer.set_colors({i: self._colors.get(i, "w") for i in ids})
+
+            s.add_layers(layer)
+
+        if self._neuropil_source is not None:
+            id, source = self._neuropil_source.split("@")
+            layer = ngl.SegmentationLayer(source, name="neuropil")
+            layer["segments"] = [int(id)]
+            layer["segmentDefaultColor"] = "#ffffff"
+            layer["meshSilhouetteRendering"] = 3
+            layer["objectAlpha"] = 0.4
+            layer["source"] = {
+                "url": source,
+                "subsources": {
+                    "default": True,
+                    "meshes": True,
+                    "bounds": False,
+                    "skeletons": False,
+                },
+            }
+            s.add_layers(layer)
+
+        return s
+
     def _load_mesh(self, x, vol, lod=-1, **kwargs):
         """Load a single mesh."""
         x = int(x)
-        try:
-            m = vol.mesh.get(x, lod=lod)[x]
-        except:
-            return None
 
+        # Get the color before we load the mesh
         if "color" not in kwargs:
             if int(x) in self._colors:
                 kwargs["color"] = self._colors[int(x)]
             else:
                 kwargs["color"] = self.viewer._next_color()
+
+        try:
+            m = vol.mesh.get(x, lod=lod)[x]
+        except BaseException as e:
+            return None
 
         return oc.visuals.mesh2gfx(m, **kwargs)
 
@@ -243,6 +338,11 @@ class DVIDVolume:
         self.server, self.node = self.url.replace("https://", "").split("/")[:2]
         self.server = f"https://{self.server}"
 
+        # Translate the node name if necessary
+        if ":master" in self.node:
+            self.node = get_master_node(self.node.replace(":master", ""), self.server)
+            self.url = f"{self.server}/{self.node}"
+
         self.mesh = DVIDMesh(self.server, self.node)
 
 
@@ -295,3 +395,9 @@ class PrecomputedMesh:
                 f"{self.url}/{x}", progress=False, datatype="mesh"
             )
         }
+
+
+@lru_cache
+def get_master_node(node, server):
+    """Cached function to get the master node name."""
+    return dv.get_master_node(node, server)

@@ -906,6 +906,10 @@ class Dendrogram(Figure):
         """Sync the dendrogram with a neuroglancer viewer."""
         self._ngl_viewer = viewer
 
+        # Activate the neuroglancer controls tab
+        if hasattr(self, "_controls"):
+            self._controls.tabs.setTabEnabled(2, True)
+
     def sync_widget(self, widget):
         """Connect a widget to the dendrogram.
 

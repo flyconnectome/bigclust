@@ -43,21 +43,28 @@ class DendrogramControls(QtWidgets.QWidget):
 
         self.tab1 = QtWidgets.QWidget()
         self.tab2 = QtWidgets.QWidget()
+        self.tab3 = QtWidgets.QWidget()
         self.tab1_layout = QtWidgets.QVBoxLayout()
         self.tab2_layout = QtWidgets.QVBoxLayout()
+        self.tab3_layout = QtWidgets.QVBoxLayout()
         self.tab1.setLayout(self.tab1_layout)
         self.tab2.setLayout(self.tab2_layout)
+        self.tab3.setLayout(self.tab3_layout)
 
         self.tabs.addTab(self.tab1, "General")
         self.tabs.addTab(self.tab2, "Annotation")
+        self.tabs.addTab(self.tab3, "Neuroglancer")
 
-        # Deactivate tab
+        # Deactivate tabs
         if not os.environ.get("BC_ANNOTATION", "0") == "1":
             self.tabs.setTabEnabled(1, False)
+        if not hasattr(self.figure, "_ngl_viewer"):
+            self.tabs.setTabEnabled(2, False)
 
         # Build gui
         self.build_control_gui()
         self.build_annotation_gui()
+        self.build_neuroglancer_gui()
 
         # Holds the futures for requested data
         self.futures = {}
@@ -176,10 +183,31 @@ class DendrogramControls(QtWidgets.QWidget):
 
         return
 
+    def build_neuroglancer_gui(self):
+        # Add buttons to generate neuroglancer scene
+        self.ngl_open_button = QtWidgets.QPushButton("Open in browser")
+        self.ngl_open_button.setToolTip(
+            "Open the current scene in a new browser window"
+        )
+        self.ngl_open_button.clicked.connect(self.ngl_open)
+        self.tab3_layout.addWidget(self.ngl_open_button)
+
+        self.ngl_copy_button = QtWidgets.QPushButton("Copy to clipboard")
+        self.ngl_copy_button.setToolTip(
+            "Copy the current scene to the clipboard"
+        )
+        self.ngl_copy_button.clicked.connect(self.ngl_copy)
+        self.tab3_layout.addWidget(self.ngl_copy_button)
+
+        # This makes it so the legend does not stretch
+        self.tab3_layout.addStretch(1)
+
     def build_annotation_gui(self):
         # Add buttons to push annotations
         self.push_ann_button = QtWidgets.QPushButton("Push annotations")
-        self.push_ann_button.setToolTip("Push the current annotation to selected fields")
+        self.push_ann_button.setToolTip(
+            "Push the current annotation to selected fields"
+        )
         self.push_ann_button.clicked.connect(self.push_annotation)
         self.tab2_layout.addWidget(self.push_ann_button)
 
@@ -196,16 +224,16 @@ class DendrogramControls(QtWidgets.QWidget):
         self.set_label = QtWidgets.QLabel("Which fields to set:")
         self.tab2_layout.addWidget(self.set_label)
 
-        self.set_flywire_check = QtWidgets.QCheckBox("Clio flywire_type")
+        self.set_flywire_check = QtWidgets.QCheckBox("Clio: flywire_type")
         self.set_flywire_check.setToolTip("Set the `flywire_type` field in Clio")
         self.set_flywire_check.setChecked(True)
         self.tab2_layout.addWidget(self.set_flywire_check)
 
-        self.set_type_check = QtWidgets.QCheckBox("Clio type")
+        self.set_type_check = QtWidgets.QCheckBox("Clio: type")
         self.set_type_check.setToolTip("Set the `type` field in Clio")
         self.tab2_layout.addWidget(self.set_type_check)
 
-        self.set_mcns_type_check = QtWidgets.QCheckBox("FlyTable malecns type")
+        self.set_mcns_type_check = QtWidgets.QCheckBox("FlyTable: malecns_type")
         self.set_mcns_type_check.setToolTip("Set the `malecns_type` field in FlyTable")
         self.tab2_layout.addWidget(self.set_mcns_type_check)
 
@@ -439,6 +467,19 @@ class DendrogramControls(QtWidgets.QWidget):
         """Close the controls."""
         super().close()
 
+    def ngl_open(self):
+        if not hasattr(self.figure, "_ngl_viewer"):
+            raise ValueError("Figure has no neuroglancer viewer")
+        scene = self.figure._ngl_viewer.neuroglancer_scene()
+        scene.open()
+
+    def ngl_copy(self):
+        if not hasattr(self.figure, "_ngl_viewer"):
+            raise ValueError("Figure has no neuroglancer viewer")
+        scene = self.figure._ngl_viewer.neuroglancer_scene()
+        scene.to_clipboard()
+        self.figure.show_message("Link copied to clipboard", color="lightgreen", duration=2)
+
 
 class QHLine(QtWidgets.QFrame):
     def __init__(self):
@@ -485,9 +526,7 @@ def _push_annotations(
             )
 
         if (set_flywire or set_type) and set_mcns_type:
-            msg = (
-                f"Set {label} for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
-            )
+            msg = f"Set {label} for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
         elif set_flywire or set_type:
             msg = f"Set {label} for {len(bodyids)} male CNS neurons"
         elif set_mcns_type:
@@ -503,18 +542,22 @@ def _push_annotations(
             # Update the labels in the dendrogram
             if (set_flywire or set_type) and bodyids is not None:
                 figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, bodyids)], f"{label}(!)"
+                    figure.selected[np.isin(figure.selected_ids, bodyids)],
+                    f"{label}(!)",
                 )
             if set_mcns_type and rootids is not None:
                 figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, rootids)], f"{label}(!)"
+                    figure.selected[np.isin(figure.selected_ids, rootids)],
+                    f"{label}(!)",
                 )
 
             # Show the message
             figure.show_message(msg, color="lightgreen", duration=2)
     except:
         if figure:
-            figure.show_message("Error pushing annotations (see console)", color="red", duration=2)
+            figure.show_message(
+                "Error pushing annotations (see console)", color="red", duration=2
+            )
         raise
 
 
@@ -567,11 +610,13 @@ def _clear_annotations(
             # Update the labels in the dendrogram
             if (clear_flywire or clear_type) and bodyids is not None:
                 figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, bodyids)], "(cleared)(!)"
+                    figure.selected[np.isin(figure.selected_ids, bodyids)],
+                    "(cleared)(!)",
                 )
             if clear_mcns_type and rootids is not None:
                 figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, rootids)], "(cleared)(!)"
+                    figure.selected[np.isin(figure.selected_ids, rootids)],
+                    "(cleared)(!)",
                 )
 
             # Show the message
