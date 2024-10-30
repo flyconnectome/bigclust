@@ -3,6 +3,7 @@ import os
 import uuid
 import pyperclip
 
+import pandas as pd
 import numpy as np
 
 from functools import partial
@@ -19,7 +20,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 CLIO_CLIENT = None
 CLIO_ANN = None
+NEUPRINT_CLIENT = None
 FLYWIRE_ANN = None
+HB_ANN = None
 
 
 class DendrogramControls(QtWidgets.QWidget):
@@ -245,8 +248,25 @@ class DendrogramControls(QtWidgets.QWidget):
         self.set_sanity_check.setChecked(True)
         self.tab2_layout.addWidget(self.set_sanity_check)
 
+        # Add button to set new Clio group
+        self.clio_group_button = QtWidgets.QPushButton("New Clio group")
+        self.clio_group_button.setToolTip(
+            "Assign new Clio group. This will use the lowest body ID as group ID."
+        )
+        self.clio_group_button.clicked.connect(self.new_clio_group)
+        self.tab2_layout.addWidget(self.clio_group_button)
+
+        # Add button to suggest new MCNS type
+        self.suggest_type_button = QtWidgets.QPushButton("Suggest male-only type")
+        self.suggest_type_button.setToolTip(
+            "Suggest new male-only type based on main input neuropil(s). See console for output."
+        )
+        self.suggest_type_button.clicked.connect(self.suggest_type)
+        self.tab2_layout.addWidget(self.suggest_type_button)
+
         # This makes it so the legend does not stretch
         self.tab2_layout.addStretch(1)
+
 
     def add_split(self, layout):
         """Add horizontal divider."""
@@ -353,6 +373,10 @@ class DendrogramControls(QtWidgets.QWidget):
             figure=self.figure,
         )
 
+        if self.set_type_check.isChecked() and len(bodyids) and CLIO_ANN is not None:
+            # Update the CLIO annotations
+            CLIO_ANN.loc[CLIO_ANN.bodyId.isin(bodyids), "type"] = label
+
         # if (
         #     self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
         # ) and self.set_mcns_type_check.isChecked():
@@ -418,6 +442,65 @@ class DendrogramControls(QtWidgets.QWidget):
             ftu=ftu,  #  pass the module
             figure=self.figure,
         )
+
+    def new_clio_group(self):
+        """Set a new Clio group for given IDs."""
+        selected_ids = self.figure.selected_ids
+        if selected_ids is None:
+            self.figure.show_message("No selection", color="red", duration=2)
+            return
+
+        # Get the male CNS IDs
+        from fafbseg import flywire
+
+        is_root = flywire.is_valid_root(selected_ids)
+        bodyids = selected_ids[~is_root]
+
+        if not len(bodyids):
+            self.figure.show_message(
+                "No MCNS neurons selected", color="red", duration=2
+            )
+            return
+
+        group = min(bodyids)
+
+        # Get the clio module
+        import clio
+
+        global CLIO_CLIENT
+        if CLIO_CLIENT is None:
+            CLIO_CLIENT = clio.Client(dataset="CNS")
+
+        # Submit the annotations
+        self.futures[(group, uuid.uuid4())] = self.pool.submit(
+            _push_group,
+            group=group,
+            bodyids=bodyids,
+            clio=clio,  #  pass the module
+            figure=self.figure,
+        )
+
+    def suggest_type(self):
+        """Suggest a new male-only type for given IDs."""
+        selected_ids = self.figure.selected_ids
+        if selected_ids is None:
+            self.figure.show_message("No selection", color="red", duration=2)
+            return
+
+        # Get the male CNS IDs
+        from fafbseg import flywire
+
+        is_root = flywire.is_valid_root(selected_ids)
+        bodyids = selected_ids[~is_root]
+
+        if not len(bodyids):
+            self.figure.show_message(
+                "No MCNS neurons selected", color="red", duration=2
+            )
+            return
+
+        # Threading this doesn't make much sense
+        suggest_new_label(bodyids=bodyids)
 
     def set_add_group(self):
         """Set whether to add neurons as group when selected."""
@@ -623,5 +706,100 @@ def _clear_annotations(
             figure.show_message(msg, color="lightgreen", duration=2)
     except:
         if figure:
-            figure.show_message("Error pushing annotations (see console)", color="red", duration=2)
+            figure.show_message(
+                "Error pushing annotations (see console)", color="red", duration=2
+            )
         raise
+
+
+def _push_group(
+    group,
+    bodyids,
+    clio,
+    figure=None,
+):
+    """Push group to Clio."""
+    try:
+        if bodyids is not None:
+            clio.set_fields(bodyids, group=group)
+
+        msg = f"Set group {group} for {len(bodyids)} maleCNS neurons"
+
+        print(f"{msg}:")
+        print("  ", bodyids)
+
+        if figure:
+            # Update the labels in the dendrogram
+            figure.set_leaf_label(
+                figure.selected[np.isin(figure.selected_ids, bodyids)],
+                f"group_{group}(!)",
+            )
+            # Show the message
+            figure.show_message(msg, color="lightgreen", duration=2)
+    except:
+        if figure:
+            figure.show_message(
+                "Error pushing annotations (see console)", color="red", duration=2
+            )
+        raise
+
+
+def suggest_new_label(bodyids):
+    """Suggest a new male-only label."""
+
+    # First we need to find the main input neuropil for these neurons
+    import neuprint as neu
+
+    global NEUPRINT_CLIENT
+    if NEUPRINT_CLIENT is None:
+        NEUPRINT_CLIENT = neu.Client("https://neuprint-cns.janelia.org", dataset="cns")
+
+    meta, roi = neu.fetch_neurons(
+        neu.NeuronCriteria(bodyId=bodyids), client=NEUPRINT_CLIENT
+    )
+
+    roi['roi'] = roi.roi.str.replace("(R)", "").str.replace("(L)", "")
+
+    # Find the ROIs that collectively hold > 50% of the neurons input
+    roi_in = roi.groupby("roi").post.sum().sort_values(ascending=False)
+    roi_in = roi_in / roi_in.sum()
+
+    global HB_ANN
+    if HB_ANN is None:
+        HB_ANN = pd.read_csv(
+            "https://github.com/flyconnectome/flywire_annotations/raw/refs/heads/main/supplemental_files/Supplemental_file5_hemibrain_meta.csv"
+        )
+
+    import cocoa as cc
+
+    global CLIO_ANN
+    if CLIO_ANN is None:
+        print("Fetching Clio annotations...")
+        CLIO_ANN = cc.MaleCNS().get_annotations()
+
+    print("Suggested cell type for IDs:", bodyids)
+    for roi in roi_in.index.values[:4]:
+        # Check if we already have male-specific types for this ROI
+        this_mcns = CLIO_ANN[
+            CLIO_ANN.type.str.match(f"{roi}[0-9]+m", na=False)
+        ].type.unique()
+
+        if len(this_mcns):
+            new_id = max([int(t[len(roi) : len(roi) + 3]) for t in this_mcns]) + 1
+        else:
+            # Check if we already have hemibrain types for this ROI
+            this_hb = HB_ANN[
+                HB_ANN.type.str.match(f"{roi}[0-9]+", na=False)
+            ].morphology_type.unique()
+
+            if len(this_hb):
+                highest_hb = max([int(t[len(roi):]) for t in this_hb])
+
+                # Start with the next hundred after the highest hemibrain type
+                new_id = (highest_hb // 100 + 1) * 100
+                if (new_id - highest_hb) < 10:
+                    new_id += 100
+            else:
+                new_id = 1
+
+        print(f"{roi}{new_id:03}m ({roi_in[roi]:.2%})")
