@@ -14,5 +14,5 @@ navis
 cloud-volume
 requests
 httpx
-git+https://github.com/schlegelp/nglscenes@main
+nglscenes @ git+https://github.com/schlegelp/nglscenes@main
 
