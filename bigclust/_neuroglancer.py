@@ -55,6 +55,7 @@ class NglViewer:
 
         # Holds the futures for requested data
         self.futures = {}
+        self.n_failed = 0  # track the number of failed requests
         self.pool = ThreadPoolExecutor(max_threads)
 
         # Tracks which neurons we've already loaded
@@ -166,14 +167,16 @@ class NglViewer:
             if row.id in self.futures:
                 continue
 
-            name = f"{row.label} ({row.id})"
+            if not add_as_group:
+                name = f"{row.label} ({row.id})"
+            else:
+                name = f"group_{to_show.id.values[0]}"
 
             self.futures[(row.id, name)] = self.pool.submit(
                 self._load_mesh,
                 row.id,
                 self.volumes[row.source],
                 lod=lod,
-                # add_as_group=add_as_group,
                 **kwargs,
             )
             # self._segments[row.id] = name
@@ -280,7 +283,10 @@ class NglViewer:
         try:
             m = vol.mesh.get(x, lod=lod)[x]
         except BaseException as e:
-            return None
+            import traceback
+            print(f"Error loading mesh for {x}:")
+            traceback.print_exc()
+            return e
 
         return oc.visuals.mesh2gfx(m, **kwargs)
 
@@ -294,8 +300,9 @@ class NglViewer:
             data = future.result()
 
             # If there is no mesh, skip
-            if data is None:
-                self.report(f"Failed to load {id}", flush=True)
+            if isinstance(data, BaseException):
+                self.n_failed += 1
+                self.report(f"Failed to load {id}: {data}", flush=True)
                 continue
 
             self.report(f"Loaded {id}", flush=True)
@@ -309,11 +316,16 @@ class NglViewer:
 
         # Show progress message
         if has_futures and len(self.futures) > 0:
+            msg = f"Loading {len(self.futures):,} neurons"
+
+            if self.n_failed:
+                msg += f" ({self.n_failed} failed)"
+
             self.viewer.show_message(
-                f"Loading {len(self.futures):,} neurons",
+                msg,
                 duration=2,
                 position="top-right",
-                color="w",
+                color="w" if not self.n_failed else "r",
             )
 
         # Remove completed futures
@@ -321,9 +333,19 @@ class NglViewer:
 
         # If all futures completed
         if has_futures and len(self.futures) == 0:
-            self.viewer.show_message(
-                "All neurons loaded", duration=2, position="top-right", color="w"
-            )
+            if not self.n_failed:
+                self.viewer.show_message(
+                    "All neurons loaded", duration=2, position="top-right", color="w"
+                )
+            else:
+                self.viewer.show_message(
+                    f"{self.n_failed} neurons failed to load",
+                    duration=2,
+                    position="top-right",
+                    color="r",
+                )
+                # Reset the number of failed requests
+                self.n_failed = 0
 
 
 class DVIDVolume:
@@ -362,6 +384,7 @@ class DVIDMesh:
                 on_error="raise",
             )[0]
         except requests.exceptions.HTTPError:
+            print(f" Failed to load mesh for {x} - falling back to alternative service")
             # If the mesh is missing, try the alternative service
             # This is slower but should mesh the neuron from scratch
             url = f"https://ngsupport-bmcp5imp6q-uk.a.run.app/small-mesh?dvid=https://emdata-mcns.janelia.org&uuid={self.node}&body={x}&segmentation=segmentation"
