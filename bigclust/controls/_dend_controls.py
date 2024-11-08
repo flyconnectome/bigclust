@@ -2,6 +2,7 @@ import re
 import os
 import uuid
 import pyperclip
+import traceback
 
 import pandas as pd
 import numpy as np
@@ -636,11 +637,12 @@ def _push_annotations(
 
             # Show the message
             figure.show_message(msg, color="lightgreen", duration=2)
-    except:
+    except BaseException as e:
         if figure:
             figure.show_message(
                 "Error pushing annotations (see console)", color="red", duration=2
             )
+        traceback.print_exc()
         raise
 
 
@@ -709,6 +711,7 @@ def _clear_annotations(
             figure.show_message(
                 "Error pushing annotations (see console)", color="red", duration=2
             )
+        traceback.print_exc()
         raise
 
 
@@ -741,6 +744,7 @@ def _push_group(
             figure.show_message(
                 "Error pushing annotations (see console)", color="red", duration=2
             )
+        traceback.print_exc()
         raise
 
 
