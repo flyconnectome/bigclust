@@ -762,7 +762,11 @@ def suggest_new_label(bodyids):
         neu.NeuronCriteria(bodyId=bodyids), client=NEUPRINT_CLIENT
     )
 
-    roi['roi'] = roi.roi.str.replace("(R)", "").str.replace("(L)", "")
+    # Drop non-primary ROIs
+    roi = roi[roi.roi.isin(NEUPRINT_CLIENT.primary_rois)]
+
+    # Remove the hemisphere information
+    roi["roi"] = roi.roi.str.replace("(R)", "").str.replace("(L)", "")
 
     # Find the ROIs that collectively hold > 50% of the neurons input
     roi_in = roi.groupby("roi").post.sum().sort_values(ascending=False)
@@ -797,7 +801,7 @@ def suggest_new_label(bodyids):
             ].morphology_type.unique()
 
             if len(this_hb):
-                highest_hb = max([int(t[len(roi):]) for t in this_hb])
+                highest_hb = max([int(t[len(roi) :]) for t in this_hb])
 
                 # Start with the next hundred after the highest hemibrain type
                 new_id = (highest_hb // 100 + 1) * 100
