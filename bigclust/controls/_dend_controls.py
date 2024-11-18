@@ -80,6 +80,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.search_text = QtWidgets.QLabel("Search")
         self.tab1_layout.addWidget(self.search_text)
         self.searchbar = QtWidgets.QLineEdit()
+        self.searchbar.setToolTip("Search for a label in the scene. Use a leading '/' to search for a regex.")
         self.searchbar.returnPressed.connect(self.find_next)
         # self.searchbar.textChanged.connect(self.figure.highlight_cluster)
         self.searchbar_completer = QtWidgets.QCompleter(self.labels)
@@ -197,9 +198,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.tab3_layout.addWidget(self.ngl_open_button)
 
         self.ngl_copy_button = QtWidgets.QPushButton("Copy to clipboard")
-        self.ngl_copy_button.setToolTip(
-            "Copy the current scene to the clipboard"
-        )
+        self.ngl_copy_button.setToolTip("Copy the current scene to the clipboard")
         self.ngl_copy_button.clicked.connect(self.ngl_copy)
         self.tab3_layout.addWidget(self.ngl_copy_button)
 
@@ -249,6 +248,34 @@ class DendrogramControls(QtWidgets.QWidget):
         self.set_sanity_check.setChecked(True)
         self.tab2_layout.addWidget(self.set_sanity_check)
 
+        # Add dropdown to set dimorphism status
+        self.sel_dimorphism_action = QtWidgets.QPushButton(text="Set dimorphism")
+        self.tab2_layout.addWidget(self.sel_dimorphism_action)
+        self.sel_dimorphism_action_menu = QtWidgets.QMenu(self)
+        self.sel_dimorphism_action.setMenu(self.sel_dimorphism_action_menu)
+
+        # Set actions for the clipboard dropdown
+        self.sel_dimorphism_action_menu.addAction("Sex-specific")
+        self.sel_dimorphism_action_menu.actions()[-1].triggered.connect(
+            lambda x: self.selected_set_dimorphism("sex-specific")
+        )
+        self.sel_dimorphism_action_menu.addAction("Sexually dimorphic")
+        self.sel_dimorphism_action_menu.actions()[-1].triggered.connect(
+            lambda x: self.selected_set_dimorphism("sexually dimorphic")
+        )
+        self.sel_dimorphism_action_menu.addAction("Pot. sex-specific")
+        self.sel_dimorphism_action_menu.actions()[-1].triggered.connect(
+            lambda x: self.selected_set_dimorphism("potentially sex-specific")
+        )
+        self.sel_dimorphism_action_menu.addAction("Pot. sexually dimorphic")
+        self.sel_dimorphism_action_menu.actions()[-1].triggered.connect(
+            lambda x: self.selected_set_dimorphism("potentially sexually dimorphic")
+        )
+        self.sel_dimorphism_action_menu.addAction("Not dimorphic")
+        self.sel_dimorphism_action_menu.actions()[-1].triggered.connect(
+            lambda x: self.selected_set_dimorphism(None)
+        )
+
         # Add button to set new Clio group
         self.clio_group_button = QtWidgets.QPushButton("New Clio group")
         self.clio_group_button.setToolTip(
@@ -267,7 +294,6 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # This makes it so the legend does not stretch
         self.tab2_layout.addStretch(1)
-
 
     def add_split(self, layout):
         """Add horizontal divider."""
@@ -295,8 +321,49 @@ class DendrogramControls(QtWidgets.QWidget):
                 continue
             self.ann_combo_box.addItem(label)
 
+    def selected_set_dimorphism(self, dimorphism):
+        """Push dimorphism to Clio/FlyTable."""
+        assert dimorphism in (
+            "sex-specific",
+            "sexually dimorphic",
+            "potentially sex-specific",
+            "potentially sexually-dimorphic",
+            None,
+        )
+        selected_ids = self.figure.selected_ids
+        if selected_ids is None:
+            self.figure.show_message("No selection", color="red", duration=2)
+            return
+
+        # Get the male CNS IDs
+        from fafbseg import flywire
+
+        is_root = flywire.is_valid_root(selected_ids)
+        bodyids = selected_ids[~is_root]
+        rootids = selected_ids[is_root]
+
+        # Get the annotation
+        import clio
+
+        global CLIO_CLIENT
+        if CLIO_CLIENT is None:
+            CLIO_CLIENT = clio.Client(dataset="CNS")
+
+        import ftu
+
+        # Submit the annotations
+        self.futures[(dimorphism, uuid.uuid4())] = self.pool.submit(
+            _push_dimorphism,
+            dimorphism=dimorphism,
+            bodyids=bodyids,
+            rootids=rootids,
+            clio=clio,  #  pass the module
+            ftu=ftu,  #  pass the module
+            figure=self.figure,
+        )
+
     def push_annotation(self):
-        """Push the current annotation to Clio."""
+        """Push the current annotation to Clio/FlyTable."""
         if not any(
             (
                 self.set_flywire_check.isChecked(),
@@ -376,7 +443,9 @@ class DendrogramControls(QtWidgets.QWidget):
 
         if self.set_type_check.isChecked() and len(bodyids) and CLIO_ANN is not None:
             # Update the CLIO annotations
-            CLIO_ANN.loc[CLIO_ANN.bodyId.isin(bodyids), "type"] = label
+            CLIO_ANN.loc[
+                CLIO_ANN.get("bodyId", CLIO_ANN.get("bodyid")).isin(bodyids), "type"
+            ] = label
 
         # if (
         #     self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
@@ -511,8 +580,13 @@ class DendrogramControls(QtWidgets.QWidget):
         """Find next occurrence."""
         text = self.searchbar.text()
         if text:
-            if not hasattr(self, "_label_search") or self._label_search.label != text:
-                self._label_search = self.figure.find_label(text)
+            regex = False
+            if text.startswith("/"):
+                regex = True
+                text = text[1:]
+
+            if not hasattr(self, "_label_search") or self._label_search.label != text or self._label_search.regex != regex:
+                self._label_search = self.figure.find_label(text, regex=regex)
 
             # LabelSearch can be `None` if no match found
             if self._label_search:
@@ -522,8 +596,13 @@ class DendrogramControls(QtWidgets.QWidget):
         """Find previous occurrence."""
         text = self.searchbar.text()
         if text:
-            if not hasattr(self, "_label_search") or self._label_search.label != text:
-                self._label_search = self.figure.find_label(text)
+            regex = False
+            if text.startswith("/"):
+                regex = True
+                text = text[1:]
+
+            if not hasattr(self, "_label_search") or self._label_search.label != text or self._label_search.regex != regex:
+                self._label_search = self.figure.find_label(text, regex=regex)
 
             # LabelSearch can be `None` if no match found
             if self._label_search:
@@ -562,7 +641,9 @@ class DendrogramControls(QtWidgets.QWidget):
             raise ValueError("Figure has no neuroglancer viewer")
         scene = self.figure._ngl_viewer.neuroglancer_scene()
         scene.to_clipboard()
-        self.figure.show_message("Link copied to clipboard", color="lightgreen", duration=2)
+        self.figure.show_message(
+            "Link copied to clipboard", color="lightgreen", duration=2
+        )
 
 
 class QHLine(QtWidgets.QFrame):
@@ -590,9 +671,9 @@ def _push_annotations(
     set_mcns_type=True,
     figure=None,
 ):
-    """Push the current annotation to Clio."""
+    """Push the current annotation to Clio/FlyTable."""
     try:
-        if bodyids is not None:
+        if bodyids is not None and len(bodyids):
             if set_flywire and set_type:
                 clio.set_fields(bodyids, flywire_type=label, type=label)
             elif set_flywire:
@@ -600,7 +681,7 @@ def _push_annotations(
             elif set_type:
                 clio.set_fields(bodyids, type=label)
 
-        if set_mcns_type and rootids is not None:
+        if set_mcns_type and rootids is not None and len(rootids):
             ftu.info.update_fields(
                 rootids,
                 malecns_type=label,
@@ -646,6 +727,62 @@ def _push_annotations(
         raise
 
 
+def _push_dimorphism(
+    dimorphism,
+    bodyids,
+    rootids,
+    clio,
+    ftu,
+    figure=None,
+):
+    """Push dimorphism status to Clio/FlyTable."""
+    try:
+        if bodyids is not None and len(bodyids):
+            if dimorphism == "sex-specific":
+                label = "male-specific"
+            else:
+                label = dimorphism
+
+            clio.set_fields(bodyids, dimorphism=label)
+
+        if rootids is not None and len(rootids):
+            if dimorphism == "sex-specific":
+                label = "female-specific"
+            else:
+                label = dimorphism
+
+            ftu.info.update_fields(
+                rootids,
+                dimorphism=label,
+                id_col="root_783",
+                dry_run=False
+            )
+
+        if bodyids is not None and rootids is not None:
+            msg = f"Set dimorphism to '{dimorphism}' for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
+        elif bodyids is not None:
+            msg = f"Set dimorphism to '{dimorphism}' for {len(bodyids)} male CNS neurons"
+        elif rootids is not None:
+            msg = f"Set dimorphism to '{dimorphism}' for {len(rootids)} FlyWire neurons"
+
+        print(f"{msg}:")
+        if bodyids is not None and len(bodyids):
+            print("  ", bodyids)
+        if rootids is not None and len(rootids):
+            print("  ", rootids)
+
+        if figure:
+            # Show the message
+            figure.show_message(msg, color="lightgreen", duration=2)
+    except BaseException as e:
+        if figure:
+            figure.show_message(
+                "Error pushing dimorphism status (see console)", color="red", duration=2
+            )
+        traceback.print_exc()
+        raise
+
+
 def _clear_annotations(
     bodyids,
     rootids,
@@ -660,7 +797,7 @@ def _clear_annotations(
     cleared_fields = []
     cleared_ids = []
     try:
-        if bodyids is not None:
+        if bodyids is not None and len(bodyids):
             if clear_flywire and clear_type:
                 clio.set_fields(bodyids, flywire_type=None, type=None)
                 cleared_fields += ["`type`", "`flywire_type`"]
@@ -672,7 +809,7 @@ def _clear_annotations(
                 cleared_fields.append("`type`")
             cleared_ids.append(f"{len(bodyids)} maleCNS")
 
-        if clear_mcns_type and rootids is not None:
+        if clear_mcns_type and rootids is not None and len(rootids):
             ftu.info.update_fields(
                 rootids,
                 malecns_type=None,
