@@ -695,7 +695,7 @@ def _push_annotations(
             ftu.info.update_fields(
                 rootids,
                 malecns_type=label,
-                malecns_type_source="PS",
+                malecns_type_source=os.environ.get("BC_ANNOTATION_USER", "bigclust"),
                 id_col="root_783",
                 dry_run=False,
             )
