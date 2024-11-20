@@ -63,12 +63,12 @@ class Dendrogram(Figure):
         self,
         linkage,
         table,
-        labels='label',
-        ids='id',
-        clusters='cluster',
+        labels="label",
+        ids="id",
+        clusters="cluster",
         cluster_colors=None,
-        hover_info='hover_info',
-        leaf_types='dataset',
+        hover_info="hover_info",
+        leaf_types="dataset",
         **kwargs,
     ):
         super().__init__(size=(1000, 400), **kwargs)
@@ -130,7 +130,7 @@ class Dendrogram(Figure):
         )
 
         # self.renderer.add_event_handler(self._mouse_press, "pointer_down")
-        self.renderer.add_event_handler(lambda x: self.deselect_all(), "double_click")
+        self.deselect_on_dclick = False
 
         # This group will hold text labels that need to move but not scale with the dendrogram
         self._text_group = gfx.Group()
@@ -300,7 +300,7 @@ class Dendrogram(Figure):
 
         self.selected = selected
 
-    def deselect_all(self):
+    def deselect_all(self, *args):
         """Deselect all selected leafs."""
         self.selected = None
 
@@ -423,6 +423,21 @@ class Dendrogram(Figure):
         self._leaf_size = size
         for l in self._leaf_visuals:
             l.material.size = size
+
+    @property
+    def deselect_on_dclick(self):
+        return getattr(self, '_deselect_on_dclick', False)
+
+    @deselect_on_dclick.setter
+    def deselect_on_dclick(self, x):
+        assert isinstance(x, bool), "deselect_on_dclick must be a boolean."
+
+        if x and not self.deselect_on_dclick:
+            self.renderer.add_event_handler(self.deselect_all, "double_click")
+        elif not x and self.deselect_on_dclick:
+            self.renderer.remove_event_handler(self.deselect_all, "double_click")
+
+        self._deselect_on_dclick = x
 
     def set_xscale(self, x):
         self._dendrogram_group.local.scale_x = x

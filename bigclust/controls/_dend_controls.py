@@ -182,6 +182,12 @@ class DendrogramControls(QtWidgets.QWidget):
         self.add_group_check.stateChanged.connect(self.set_add_group)
         self.tab1_layout.addWidget(self.add_group_check)
 
+        self.dclick_deselect = QtWidgets.QCheckBox("Deselect on double-click")
+        self.dclick_deselect.setToolTip("You can always deselect using ESC")
+        self.dclick_deselect.setChecked(self.figure.deselect_on_dclick)
+        self.dclick_deselect.stateChanged.connect(self.set_dclick_deselect)
+        self.tab1_layout.addWidget(self.dclick_deselect)
+
         # This would make it so the legend does not stretch when
         # we resize the window vertically
         self.tab1_layout.addStretch(1)
@@ -575,6 +581,10 @@ class DendrogramControls(QtWidgets.QWidget):
     def set_add_group(self):
         """Set whether to add neurons as group when selected."""
         self.figure._add_as_group = self.add_group_check.isChecked()
+
+    def set_dclick_deselect(self):
+        """Set whether to deselect on double-click."""
+        self.figure.deselect_on_dclick = self.dclick_deselect.isChecked()
 
     def find_next(self):
         """Find next occurrence."""
