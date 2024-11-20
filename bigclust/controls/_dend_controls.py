@@ -344,7 +344,7 @@ class DendrogramControls(QtWidgets.QWidget):
         # Get the male CNS IDs
         from fafbseg import flywire
 
-        is_root = flywire.is_valid_root(selected_ids)
+        is_root = is_root_id(selected_ids)
         bodyids = selected_ids[~is_root]
         rootids = selected_ids[is_root]
 
@@ -390,10 +390,7 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No label to push", color="red", duration=2)
             return
 
-        # Get the male CNS IDs
-        from fafbseg import flywire
-
-        is_root = flywire.is_valid_root(selected_ids)
+        is_root = is_root_id(selected_ids)
         bodyids = selected_ids[~is_root]
         rootids = selected_ids[is_root]
 
@@ -488,10 +485,7 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No neurons selected", color="red", duration=2)
             return
 
-        # Get the male CNS IDs
-        from fafbseg import flywire
-
-        is_root = flywire.is_valid_root(selected_ids)
+        is_root = is_root_id(selected_ids)
         bodyids = selected_ids[~is_root]
         rootids = selected_ids[is_root]
 
@@ -526,10 +520,7 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No selection", color="red", duration=2)
             return
 
-        # Get the male CNS IDs
-        from fafbseg import flywire
-
-        is_root = flywire.is_valid_root(selected_ids)
+        is_root = is_root_id(selected_ids)
         bodyids = selected_ids[~is_root]
 
         if not len(bodyids):
@@ -563,10 +554,7 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No selection", color="red", duration=2)
             return
 
-        # Get the male CNS IDs
-        from fafbseg import flywire
-
-        is_root = flywire.is_valid_root(selected_ids)
+        is_root = is_root_id(selected_ids)
         bodyids = selected_ids[~is_root]
 
         if not len(bodyids):
@@ -958,3 +946,10 @@ def suggest_new_label(bodyids):
                 new_id = 1
 
         print(f"{roi}{new_id:03}m ({roi_in[roi]:.2%})")
+
+def is_root_id(x):
+    """Check if the ID is a root ID (as opposed to a body ID)."""
+    if not isinstance(x, (np.ndarray, tuple, list)):
+        x = [x]
+    return np.array([len(str(i)) > 15 for i in x])
+
