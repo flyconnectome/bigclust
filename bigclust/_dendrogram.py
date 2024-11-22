@@ -99,7 +99,7 @@ class Dendrogram(Figure):
             no_plot=True,
             labels=None,  # we don't actually need leafs in the dendrogram
             above_threshold_color="w",
-            color_threshold=0.2,
+            color_threshold=1.2,
         )
 
         # This tells us for each leaf in the original distance matrix where it is in the dendrogram
@@ -172,7 +172,9 @@ class Dendrogram(Figure):
                     # N.B. there is some funny behaviour where repeatedly setting the same
                     # text will cause the bounding box to increase every time. To avoid this
                     # we have to reset the text to anything but an empty string.
-                    self._hover_widget.children[1].geometry.set_text("asdfgasdfasdfsdafsfasdfasg")
+                    self._hover_widget.children[1].geometry.set_text(
+                        "asdfgasdfasdfsdafsfasdfasg"
+                    )
                     self._hover_widget.children[1].geometry.set_text(
                         str(hover_info[self._leafs_order[vis._leaf_ix[closest]]])
                     )
@@ -367,16 +369,18 @@ class Dendrogram(Figure):
             # `self._selected` is in order of the dendrogram, we need to translate it to the original order
             if len(self._selected) > 0:
                 self._ngl_viewer.show(
-                    self._leafs_order[self._selected],
+                    # self._leafs_order[self._selected],
+                    self._ids_ordered[self.selected],
                     add_as_group=getattr(self, "_add_as_group", False),
                 )
             else:
                 self._ngl_viewer.clear()
 
         if hasattr(self, "_synced_widgets"):
-            for w in self._synced_widgets:
+            for w, func in self._synced_widgets:
                 try:
-                    w.select(self._leafs_order[self._selected])
+                    # func(self._leafs_order[self._selected])
+                    func(self._ids_ordered[self.selected])
                 except BaseException as e:
                     print(f"Failed to sync widget {w}:\n", e)
 
@@ -411,7 +415,7 @@ class Dendrogram(Figure):
 
         # The hover widget is basically set up such that the text is size 1
         # So we just scale the whole thing accordingly when the font size changes
-        if hasattr(self, '_hover_widget'):
+        if hasattr(self, "_hover_widget"):
             self._hover_widget.local.scale = [size, size, size]
 
     @property
@@ -426,7 +430,7 @@ class Dendrogram(Figure):
 
     @property
     def deselect_on_dclick(self):
-        return getattr(self, '_deselect_on_dclick', False)
+        return getattr(self, "_deselect_on_dclick", False)
 
     @deselect_on_dclick.setter
     def deselect_on_dclick(self, x):
@@ -925,27 +929,28 @@ class Dendrogram(Figure):
         if hasattr(self, "_controls"):
             self._controls.tabs.setTabEnabled(2, True)
 
-    def sync_widget(self, widget):
+    def sync_widget(self, widget, callback=None):
         """Connect a widget to the dendrogram.
 
         Parameters
         ----------
         widget
-                The widget to sync. Must implement a `.select()` method
-                that takes a list of IDs to select.
+                The widget to sync.
+        callback
+                The function to call. If `None`, the widget must implement a
+                `.select()` method that takes a list of IDs to select.
 
         """
-        # Note to self:
-        # We should re-implement this using an emit signal and leaving
-        # it to the widget to update itself.
-        assert hasattr(widget, "select") and callable(
-            widget.select
-        ), "Widget must have a `select` method that takes a list of IDs to select."
+        if callback is None:
+            assert hasattr(widget, "select") and callable(
+                widget.select
+            ), "Widget must have a `select` method that takes a list of IDs to select."
+            callback = widget.select
 
         if not hasattr(self, "_synced_widgets"):
             self._synced_widgets = []
 
-        self._synced_widgets.append(widget)
+        self._synced_widgets.append((widget, callback))
 
     def set_viewer_colors(self, colors):
         """Set the colors for the neuroglancer viewer.

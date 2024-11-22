@@ -326,7 +326,7 @@ class ConnectivityTable(QtWidgets.QWidget):
 
     def select(self, ids):
         """Select rows by IDs."""
-        self._model.select_rows(ids, use_index=False)
+        self._model.select_rows(ids, use_index=True)
 
     def find_header(self):
         """Find the currently selected header."""

@@ -1,6 +1,7 @@
 import cmap
 import requests
 
+import numpy as np
 import octarine as oc
 import cloudvolume as cv
 import dvid as dv
@@ -34,7 +35,7 @@ class NglViewer:
         max_threads=20,
     ):
         self.debug = debug
-        self.data = data.rename({"segment_id": "id"}, axis=1).astype({"id": int})
+        self.data = data.rename({"segment_id": "id"}, axis=1).astype({"id": int}).set_index('id')
         self.set_default_colors()
 
         # Parse cloudvolumes
@@ -72,7 +73,7 @@ class NglViewer:
     def set_default_colors(self):
         # Check for color column
         if "color" in self.data.columns:
-            self._colors = self.data.set_index("id").color.to_dict()
+            self._colors = self.data.color.to_dict()
             self._colors = {int(k): cmap.Color(v).hex for k, v in self._colors.items()}
         else:
             self._colors = {}
@@ -115,30 +116,34 @@ class NglViewer:
         if self.debug:
             print(*args, **kwargs)
 
-    def show(self, indices, lod=-1, add_as_group=False, **kwargs):
+    def show(self, ids, lod=-1, add_as_group=False, **kwargs):
         """Add data to the viewer.
 
         Parameters
         ----------
-        indices :   iterable
-                    The indices of neurons to show.
+        ids :       iterable
+                    The IDs of neurons to show.
         kwargs :    dict
                     Keyword arguments to pass to the viewer.
 
         """
-        if not len(indices):
+        if not len(ids):
             self.report("Clearing viewer", flush=True)
             self.clear()
             return
 
-        to_show = self.data.iloc[indices]
+        miss = ~np.isin(ids, self.data.index.values)
+        if np.any(miss):
+            raise ValueError(f"IDs {ids[miss]} not found in the data.")
+
+        to_show = self.data.loc[ids]
         self.report(
-            f"Showing {len(to_show)} neurons: ", to_show.id.values.tolist(), flush=True
+            f"Showing {len(to_show)} neurons: ", to_show.index.values.tolist(), flush=True
         )
 
         # Remove those segments we don't want
         to_remove = [
-            self._segments[x] for x in self._segments if x not in to_show.id.values
+            self._segments[x] for x in self._segments if x not in to_show.index.values
         ]
         # to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
         self.viewer.remove_objects(to_remove)
@@ -148,7 +153,7 @@ class NglViewer:
         # Note: we need to use list() because we're potentially
         # modifying the dict inside the loop
         for (id, _), future in list(self.futures.items()):
-            if id not in to_show.id.values:
+            if id not in to_show.index.values:
                 self.report("Cancelling future for", id, flush=True)
 
                 # Cancel future
@@ -158,28 +163,28 @@ class NglViewer:
                 self.futures.pop(id, None)
 
         # Now drop those already on display
-        to_show = to_show[~to_show.id.isin(self._segments)]
+        to_show = to_show[~to_show.index.isin(self._segments)]
 
         for _, row in to_show.iterrows():
-            self.report("Loading", row.id, flush=True)
+            self.report("Loading", row.name, flush=True)
 
             # Skip if we're already loading this segment
-            if row.id in self.futures:
+            if row.name in self.futures:
                 continue
 
             if not add_as_group:
-                name = f"{row.label} ({row.id})"
+                name = f"{row.label} ({row.name})"
             else:
-                name = f"group_{to_show.id.values[0]}"
+                name = f"group_{to_show.index.values[0]}"
 
-            self.futures[(row.id, name)] = self.pool.submit(
+            self.futures[(row.name, name)] = self.pool.submit(
                 self._load_mesh,
-                row.id,
+                row.name,
                 self.volumes[row.source],
                 lod=lod,
                 **kwargs,
             )
-            # self._segments[row.id] = name
+            # self._segments[row.name] = name
 
     def clear(self):
         """Clear the viewer of selected segments."""
@@ -195,7 +200,7 @@ class NglViewer:
         """Generate neuroglancer scene for the current state."""
         # Go over all visible segments and get their layers
         ids_per_layer = {source: [] for source in self.data.source.unique()}
-        id2source = self.data.set_index("id").source.to_dict()
+        id2source = self.data.source.to_dict()
 
         # Add already loaded IDs
         for id, name in self._segments.items():
