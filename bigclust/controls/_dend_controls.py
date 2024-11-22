@@ -89,12 +89,14 @@ class DendrogramControls(QtWidgets.QWidget):
         self.tab1_layout.addWidget(self.searchbar)
 
         # Add buttons for previous/next
+        self.button_layout = QtWidgets.QHBoxLayout()
         self.next_button = QtWidgets.QPushButton("Next")
         self.next_button.clicked.connect(self.find_next)
-        self.tab1_layout.addWidget(self.next_button)
+        self.button_layout.addWidget(self.next_button)
         self.prev_button = QtWidgets.QPushButton("Previous")
         self.prev_button.clicked.connect(self.find_previous)
-        self.tab1_layout.addWidget(self.prev_button)
+        self.button_layout.addWidget(self.prev_button)
+        self.tab1_layout.addLayout(self.button_layout)
 
         # Add horizontal divider
         self.add_split(self.tab1_layout)
@@ -103,7 +105,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.sel_text = QtWidgets.QLabel("Selected:")
         self.tab1_layout.addWidget(self.sel_text)
         self.sel_action = QtWidgets.QPushButton(text="Pick action")
-        self.tab1_layout.addWidget(self.sel_action)
+        # self.tab1_layout.addWidget(self.sel_action)
         self.sel_action_menu = QtWidgets.QMenu(self)
         self.sel_action.setMenu(self.sel_action_menu)
 
