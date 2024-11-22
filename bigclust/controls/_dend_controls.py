@@ -149,6 +149,18 @@ class DendrogramControls(QtWidgets.QWidget):
         # Add horizontal divider
         self.add_split(self.tab1_layout)
 
+        self.dend_labels = QtWidgets.QLabel("Dendrogram labels:")
+        self.tab1_layout.addWidget(self.dend_labels)
+        self.label_combo_box = QtWidgets.QComboBox()
+        self.label_combo_box.addItem("Default")
+        for col in self.figure._table.columns:
+            self.label_combo_box.addItem(col)
+        self.tab1_layout.addWidget(self.label_combo_box)
+        self.label_combo_box.currentIndexChanged.connect(self.set_leaf_labels)
+
+        # Add horizontal divider
+        self.add_split(self.tab1_layout)
+
         # Add dropdown to choose color mode
         self.color_text = QtWidgets.QLabel("Color neurons by:")
         self.tab1_layout.addWidget(self.color_text)
@@ -625,6 +637,15 @@ class DendrogramControls(QtWidgets.QWidget):
         """Set the color mode."""
         mode = self.color_combo_box.currentText()
         self.figure.set_viewer_color_mode(mode.lower())
+
+    def set_leaf_labels(self):
+        mode = self.label_combo_box.currentText()
+
+        if mode == 'Default':
+            mode = self.figure._default_label_col
+
+        labels = self.figure._table[mode].astype(str).fillna('').values
+        self.figure.set_leaf_label(np.arange(len(self.figure)), labels[self.figure._leafs_order])
 
     def close(self):
         """Close the controls."""

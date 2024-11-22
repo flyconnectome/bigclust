@@ -74,20 +74,24 @@ class Dendrogram(Figure):
         super().__init__(size=(1000, 400), **kwargs)
 
         self._linkage = np.asarray(linkage)
-        self._labels = np.asarray(table[labels]) if labels is not None else None
+        self._table = table
+        self._default_label_col = labels
+        self._labels = np.array(table[labels].values) if labels is not None else None  # make sure to use  a copy
         self._ids = np.asarray(table[ids]) if ids is not None else None
         self._clusters = np.asarray(table[clusters]) if clusters is not None else None
-        self._leaf_types = np.asarray(table[leaf_types]) if leaf_types is not None else None
+        self._leaf_types = (
+            np.asarray(table[leaf_types]) if leaf_types is not None else None
+        )
         self._rotate_labels = True
         self._selected = None
 
         if hover_info is not None:
-            if '{' in hover_info:
+            if "{" in hover_info:
                 hover_info = table.apply(hover_info.format_map, axis=1)
             else:
                 hover_info = table[hover_info]
         self._hover_info = np.asarray(hover_info) if hover_info is not None else None
-        
+
         self._leaf_size = self.x_spacing / 10
         self._font_size = 2
         self.label_vis_limit = 200  # number of labels shown at once before hiding all
@@ -1015,22 +1019,27 @@ class Dendrogram(Figure):
         self.set_viewer_colors(colors)
 
     def set_leaf_label(self, indices, label):
-        """Change the label of given leaf(s) in the dendrogram."""
-        # Index is expected to be in the order of dendrogram left to right
+        """Change the label of given leaf(s) in the dendrogram.
 
+        Indices are expected to be in the order of dendrogram left to right!
+        """
         if self._labels is None:
             raise ValueError("No labels were provided.")
 
-        if isinstance(indices, int):
+        if not isinstance(indices, (list, np.ndarray, tuple, set)):
             indices = [indices]
 
         original_ix = self._leafs_order[indices]
+
+        if isinstance(label, str):
+            label = [label] * len(indices)
+
         self._labels[original_ix] = label
-        for ix in indices:
+        for ix, lab in zip(indices, label):
             ix_org = self._leafs_order[ix]
             if self._label_visuals[ix_org] is not None:
-                self._label_visuals[ix_org].geometry.set_text(label)
-                self._label_visuals[ix_org].geometry._text = label
+                self._label_visuals[ix_org].geometry.set_text(lab)
+                self._label_visuals[ix_org].geometry._text = lab
 
 
 class LabelSearch:
