@@ -347,7 +347,7 @@ class DendrogramControls(QtWidgets.QWidget):
             "sex-specific",
             "sexually dimorphic",
             "potentially sex-specific",
-            "potentially sexually-dimorphic",
+            "potentially sexually dimorphic",
             None,
         )
         selected_ids = self.figure.selected_ids
