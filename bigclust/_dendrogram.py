@@ -77,6 +77,9 @@ class Dendrogram(Figure):
         self._table = table
         self._default_label_col = labels
         self._labels = np.array(table[labels].values) if labels is not None else None  # make sure to use  a copy
+        if self._labels is not None:
+            # `_label_visuals` is in the same order as `_labels`
+            self._label_visuals = [None] * len(self._labels)
         self._ids = np.asarray(table[ids]) if ids is not None else None
         self._clusters = np.asarray(table[clusters]) if clusters is not None else None
         self._leaf_types = (
@@ -111,13 +114,11 @@ class Dendrogram(Figure):
         # This is the inverse of the above, i.e. for each leaf in the dendrogram (left to right),
         # what is its index in the original distance matrix
         self._leafs_order_inv = np.argsort(self._leafs_order)
+        self._labels_ordered = self._labels[self._leafs_order] if self._labels is not None else None
 
         # This is the order of IDs the dendrogram left to right
         self._ids_ordered = (
             self._ids[self._leafs_order] if self._ids is not None else None
-        )
-        self._labels_ordered = (
-            self._labels[self._leafs_order] if self._labels is not None else None
         )
 
         if self._clusters is not None:
@@ -147,10 +148,6 @@ class Dendrogram(Figure):
         self._label_group = gfx.Group()
         self._label_group.visible = True
         self._text_group.add(self._label_group)
-
-        if self._labels is not None:
-            # `_label_visuals` is in the same order as `_labels`
-            self._label_visuals = [None] * len(self._labels)
 
         # Setup hover info
         if hover_info is not None:
@@ -309,6 +306,28 @@ class Dendrogram(Figure):
     def deselect_all(self, *args):
         """Deselect all selected leafs."""
         self.selected = None
+
+    @property
+    def labels(self):
+        """Return the labels of leafs in the dendrogram."""
+        return self._labels
+
+    @labels.setter
+    def labels(self, x):
+        """Set the labels of leafs in the dendrogram."""
+        if x is None:
+            self._labels = None
+            self._label_visuals = None
+            return
+        assert len(x) == len(self), "Number of labels must match number of leafs."
+        self._labels = np.asarray(x)
+        self._labels_ordered = self._labels[self._leafs_order]
+        self.update_leaf_labels()  # updates the visuals
+
+    @property
+    def labels_ordered(self):
+        """Return the labels of leafs in the dendrogram in the order of the dendrogram."""
+        return self._labels_ordered
 
     @property
     def selected_ids(self):
@@ -747,11 +766,11 @@ class Dendrogram(Figure):
                     pickable=True,
                 )
 
-                def _highlight(event, leafs):
-                    self.find_label(leafs, go_to_first=False)
+                def _highlight(event, text):
+                    self.find_label(text.geometry._text, go_to_first=False)
 
                 t.add_event_handler(
-                    partial(_highlight, leafs=t.geometry._text), "double_click"
+                    partial(_highlight, text=t), "double_click"
                 )
 
                 # `_label_visuals` is in the same order as `_labels`
@@ -1040,6 +1059,17 @@ class Dendrogram(Figure):
             if self._label_visuals[ix_org] is not None:
                 self._label_visuals[ix_org].geometry.set_text(lab)
                 self._label_visuals[ix_org].geometry._text = lab
+
+    def update_leaf_labels(self):
+        """Update the labels of the leafs in the dendrogram."""
+        if self._labels is None:
+            return
+
+        for i, l in enumerate(self._label_visuals):
+            if l is None:
+                continue
+            l.geometry.set_text(self._labels[i])
+            l.geometry._text = self._labels[i]
 
 
 class LabelSearch:
