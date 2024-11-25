@@ -34,6 +34,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.datasets = datasets
         self.setWindowTitle("Controls")
         self.resize(width, height)
+        self.label_overrides = {}
 
         self.tab_layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.tab_layout)
@@ -90,22 +91,23 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # Add buttons for previous/next
         self.button_layout = QtWidgets.QHBoxLayout()
-        self.next_button = QtWidgets.QPushButton("Next")
-        self.next_button.clicked.connect(self.find_next)
-        self.button_layout.addWidget(self.next_button)
         self.prev_button = QtWidgets.QPushButton("Previous")
         self.prev_button.clicked.connect(self.find_previous)
         self.button_layout.addWidget(self.prev_button)
+        self.next_button = QtWidgets.QPushButton("Next")
+        self.next_button.clicked.connect(self.find_next)
+        self.button_layout.addWidget(self.next_button)
         self.tab1_layout.addLayout(self.button_layout)
 
         # Add horizontal divider
         self.add_split(self.tab1_layout)
 
         # Add the dropdown to action all selected objects
+        self.selection_layout = QtWidgets.QHBoxLayout()
+        self.tab1_layout.addLayout(self.selection_layout)
         self.sel_text = QtWidgets.QLabel("Selected:")
-        self.tab1_layout.addWidget(self.sel_text)
+        self.selection_layout.addWidget(self.sel_text)
         self.sel_action = QtWidgets.QPushButton(text="Pick action")
-        # self.tab1_layout.addWidget(self.sel_action)
         self.sel_action_menu = QtWidgets.QMenu(self)
         self.sel_action.setMenu(self.sel_action_menu)
 
@@ -121,7 +123,7 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # Add the dropdown to action copy to clipboard
         self.sel_clipboard_action = QtWidgets.QPushButton(text="To clipboard")
-        self.tab1_layout.addWidget(self.sel_clipboard_action)
+        self.selection_layout.addWidget(self.sel_clipboard_action)
         self.sel_clipboard_action_menu = QtWidgets.QMenu(self)
         self.sel_clipboard_action.setMenu(self.sel_clipboard_action_menu)
 
@@ -149,14 +151,23 @@ class DendrogramControls(QtWidgets.QWidget):
         # Add horizontal divider
         self.add_split(self.tab1_layout)
 
-        self.dend_labels = QtWidgets.QLabel("Dendrogram labels:")
-        self.tab1_layout.addWidget(self.dend_labels)
+        # Add dropdown to choose leaf labels
+        self.label_layout = QtWidgets.QHBoxLayout()
+        self.tab1_layout.addLayout(self.label_layout)
+        self.dend_labels = QtWidgets.QLabel("Labels:")
+        self.label_layout.addWidget(self.dend_labels)
         self.label_combo_box = QtWidgets.QComboBox()
         self.label_combo_box.addItem("Default")
         for col in self.figure._table.columns:
             self.label_combo_box.addItem(col)
-        self.tab1_layout.addWidget(self.label_combo_box)
+        self.label_layout.addWidget(self.label_combo_box)
         self.label_combo_box.currentIndexChanged.connect(self.set_leaf_labels)
+
+        self.label_count_check = QtWidgets.QCheckBox("Add label counts")
+        self.label_count_check.setToolTip("Whether to add counts to the labels")
+        self.label_count_check.setChecked(False)
+        self.label_count_check.stateChanged.connect(self.set_label_counts)
+        self.tab1_layout.addWidget(self.label_count_check)
 
         # Add horizontal divider
         self.add_split(self.tab1_layout)
@@ -456,6 +467,7 @@ class DendrogramControls(QtWidgets.QWidget):
             clio=clio,  #  pass the module
             ftu=ftu,  #  pass the module
             figure=self.figure,
+            controls=self,
         )
 
         if self.set_type_check.isChecked() and len(bodyids) and CLIO_ANN is not None:
@@ -525,6 +537,7 @@ class DendrogramControls(QtWidgets.QWidget):
             clio=clio,  #  pass the module
             ftu=ftu,  #  pass the module
             figure=self.figure,
+            controls=self,
         )
 
     def new_clio_group(self):
@@ -588,6 +601,10 @@ class DendrogramControls(QtWidgets.QWidget):
         """Set whether to deselect on double-click."""
         self.figure.deselect_on_dclick = self.dclick_deselect.isChecked()
 
+    def set_label_counts(self):
+        """Set whether to add counts to the labels."""
+        self.set_leaf_labels()  # Update the labels
+
     def find_next(self):
         """Find next occurrence."""
         text = self.searchbar.text()
@@ -645,7 +662,21 @@ class DendrogramControls(QtWidgets.QWidget):
             mode = self.figure._default_label_col
 
         labels = self.figure._table[mode].astype(str).fillna('').values
-        self.figure.set_leaf_label(np.arange(len(self.figure)), labels[self.figure._leafs_order])
+
+        for i, label in self.label_overrides.items():
+            # Label overrides {dend index: label}
+            # We need to translate into original indices
+            labels[self.figure._leafs_order[i]] = label
+
+        if self.label_count_check.isChecked():
+            counts = pd.Series(labels).value_counts()
+            labels = [f"{label}({counts[label]})" if counts[label] > 1 else label for label in labels]
+
+        #self.figure.set_leaf_label(np.arange(len(self.figure)), labels[self.figure._leafs_order])
+        self.figure.labels = labels
+
+        # Update searchbar
+        self.searchbar_completer.setModel(np.unique(labels))
 
     def close(self):
         """Close the controls."""
@@ -691,6 +722,7 @@ def _push_annotations(
     set_type=True,
     set_mcns_type=True,
     figure=None,
+    controls=None
 ):
     """Push the current annotation to Clio/FlyTable."""
     try:
@@ -727,15 +759,13 @@ def _push_annotations(
         if figure:
             # Update the labels in the dendrogram
             if (set_flywire or set_type) and bodyids is not None:
-                figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, bodyids)],
-                    f"{label}(!)",
-                )
+                ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
+                figure.set_leaf_label( ind, f"{label}(!)")
+                controls.label_overrides.update({i: f"{label}(!)" for i in ind})
             if set_mcns_type and rootids is not None:
-                figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, rootids)],
-                    f"{label}(!)",
-                )
+                ind = figure.selected[np.isin(figure.selected_ids, rootids)]
+                figure.set_leaf_label( ind, f"{label}(!)")
+                controls.label_overrides.update({i: f"{label}(!)" for i in ind})
 
             # Show the message
             figure.show_message(msg, color="lightgreen", duration=2)
@@ -813,6 +843,7 @@ def _clear_annotations(
     clear_type=True,
     clear_mcns_type=True,
     figure=None,
+    controls=None
 ):
     """Push the current annotation to Clio."""
     cleared_fields = []
@@ -852,15 +883,13 @@ def _clear_annotations(
         if figure:
             # Update the labels in the dendrogram
             if (clear_flywire or clear_type) and bodyids is not None:
-                figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, bodyids)],
-                    "(cleared)(!)",
-                )
+                ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
+                figure.set_leaf_label(ind, "(cleared)(!)")
+                controls.label_overrides.update({i: "(cleared)(!)" for i in ind})
             if clear_mcns_type and rootids is not None:
-                figure.set_leaf_label(
-                    figure.selected[np.isin(figure.selected_ids, rootids)],
-                    "(cleared)(!)",
-                )
+                ind = figure.selected[np.isin(figure.selected_ids, rootids)]
+                figure.set_leaf_label(ind, "(cleared)(!)")
+                controls.label_overrides.update({i: "(cleared)(!)" for i in ind})
 
             # Show the message
             figure.show_message(msg, color="lightgreen", duration=2)
