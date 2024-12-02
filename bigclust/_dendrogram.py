@@ -228,6 +228,15 @@ class Dendrogram(Figure):
         self.key_events["Escape"] = lambda: self.deselect_all()
         self.key_events["l"] = lambda: self.toggle_labels()
 
+        def _toggle_last_label():
+            """Toggle between the last label and the original labels."""
+            # If no controls, there is nothing to toggle
+            if not hasattr(self, '_controls'):
+                return
+            self._controls.switch_labels()
+
+        self.key_events['m'] = _toggle_last_label
+
         # def _deselect(event):
         #     print(event.type)
 

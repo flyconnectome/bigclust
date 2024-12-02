@@ -81,7 +81,9 @@ class DendrogramControls(QtWidgets.QWidget):
         self.search_text = QtWidgets.QLabel("Search")
         self.tab1_layout.addWidget(self.search_text)
         self.searchbar = QtWidgets.QLineEdit()
-        self.searchbar.setToolTip("Search for a label in the scene. Use a leading '/' to search for a regex.")
+        self.searchbar.setToolTip(
+            "Search for a label in the scene. Use a leading '/' to search for a regex."
+        )
         self.searchbar.returnPressed.connect(self.find_next)
         # self.searchbar.textChanged.connect(self.figure.highlight_cluster)
         self.searchbar_completer = QtWidgets.QCompleter(self.labels)
@@ -162,6 +164,7 @@ class DendrogramControls(QtWidgets.QWidget):
             self.label_combo_box.addItem(col)
         self.label_layout.addWidget(self.label_combo_box)
         self.label_combo_box.currentIndexChanged.connect(self.set_leaf_labels)
+        self._current_leaf_labels = self.label_combo_box.currentText()
 
         self.label_count_check = QtWidgets.QCheckBox("Add label counts")
         self.label_count_check.setToolTip("Whether to add counts to the labels")
@@ -614,7 +617,11 @@ class DendrogramControls(QtWidgets.QWidget):
                 regex = True
                 text = text[1:]
 
-            if not hasattr(self, "_label_search") or self._label_search.label != text or self._label_search.regex != regex:
+            if (
+                not hasattr(self, "_label_search")
+                or self._label_search.label != text
+                or self._label_search.regex != regex
+            ):
                 self._label_search = self.figure.find_label(text, regex=regex)
 
             # LabelSearch can be `None` if no match found
@@ -630,7 +637,11 @@ class DendrogramControls(QtWidgets.QWidget):
                 regex = True
                 text = text[1:]
 
-            if not hasattr(self, "_label_search") or self._label_search.label != text or self._label_search.regex != regex:
+            if (
+                not hasattr(self, "_label_search")
+                or self._label_search.label != text
+                or self._label_search.regex != regex
+            ):
                 self._label_search = self.figure.find_label(text, regex=regex)
 
             # LabelSearch can be `None` if no match found
@@ -656,27 +667,56 @@ class DendrogramControls(QtWidgets.QWidget):
         self.figure.set_viewer_color_mode(mode.lower())
 
     def set_leaf_labels(self):
-        mode = self.label_combo_box.currentText()
+        """Set the leaf labels."""
+        label = self.label_combo_box.currentText()
 
-        if mode == 'Default':
-            mode = self.figure._default_label_col
+        if label == "Default":
+            label = self.figure._default_label_col
 
-        labels = self.figure._table[mode].astype(str).fillna('').values
+        # Nothing to do here
+        if self._current_leaf_labels != label:
+            self._last_leaf_labels, self._current_leaf_labels = (
+                self._current_leaf_labels,
+                label,
+            )
 
+        labels = self.figure._table[label].astype(str).fillna("").values
+
+        # For labels that were set manually by the user (via pushing annotations)
         for i, label in self.label_overrides.items():
             # Label overrides {dend index: label}
             # We need to translate into original indices
             labels[self.figure._leafs_order[i]] = label
 
+        # Add counts - e.g. "CB12345(10)"
         if self.label_count_check.isChecked():
-            counts = pd.Series(labels).value_counts()
-            labels = [f"{label}({counts[label]})" if counts[label] > 1 else label for label in labels]
-
-        #self.figure.set_leaf_label(np.arange(len(self.figure)), labels[self.figure._leafs_order])
+            counts = pd.Series(labels).value_counts().to_dict()  # dict is much faster
+            labels = [
+                f"{label}({counts[label]})" if counts[label] > 1 else label
+                for label in labels
+            ]
         self.figure.labels = labels
 
-        # Update searchbar
-        self.searchbar_completer.setModel(np.unique(labels))
+        # Update searchbar completer
+        if not hasattr(self, "_label_models"):
+            self._label_models = {}
+        if (label, self.label_count_check.isChecked()) not in self._label_models:
+            self._label_models[(label, self.label_count_check.isChecked())] = (
+                QtCore.QStringListModel(np.unique(labels).tolist())
+            )
+
+        self.searchbar_completer.setModel(
+            self._label_models[(label, self.label_count_check.isChecked())]
+        )
+
+    def switch_labels(self):
+        """Switch between current and last labels."""
+        if hasattr(self, "_last_leaf_labels"):
+            self.label_combo_box.setCurrentText(self._last_leaf_labels)
+            self.set_leaf_labels()
+            self.figure.show_message(
+                f"Labels: {self._current_leaf_labels}", color="lightgreen", duration=2
+            )
 
     def close(self):
         """Close the controls."""
@@ -722,7 +762,7 @@ def _push_annotations(
     set_type=True,
     set_mcns_type=True,
     figure=None,
-    controls=None
+    controls=None,
 ):
     """Push the current annotation to Clio/FlyTable."""
     try:
@@ -760,11 +800,11 @@ def _push_annotations(
             # Update the labels in the dendrogram
             if (set_flywire or set_type) and bodyids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
-                figure.set_leaf_label( ind, f"{label}(!)")
+                figure.set_leaf_label(ind, f"{label}(!)")
                 controls.label_overrides.update({i: f"{label}(!)" for i in ind})
             if set_mcns_type and rootids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, rootids)]
-                figure.set_leaf_label( ind, f"{label}(!)")
+                figure.set_leaf_label(ind, f"{label}(!)")
                 controls.label_overrides.update({i: f"{label}(!)" for i in ind})
 
             # Show the message
@@ -803,16 +843,15 @@ def _push_dimorphism(
                 label = dimorphism
 
             ftu.info.update_fields(
-                rootids,
-                dimorphism=label,
-                id_col="root_783",
-                dry_run=False
+                rootids, dimorphism=label, id_col="root_783", dry_run=False
             )
 
         if bodyids is not None and rootids is not None:
             msg = f"Set dimorphism to '{dimorphism}' for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
         elif bodyids is not None:
-            msg = f"Set dimorphism to '{dimorphism}' for {len(bodyids)} male CNS neurons"
+            msg = (
+                f"Set dimorphism to '{dimorphism}' for {len(bodyids)} male CNS neurons"
+            )
         elif rootids is not None:
             msg = f"Set dimorphism to '{dimorphism}' for {len(rootids)} FlyWire neurons"
 
@@ -843,7 +882,7 @@ def _clear_annotations(
     clear_type=True,
     clear_mcns_type=True,
     figure=None,
-    controls=None
+    controls=None,
 ):
     """Push the current annotation to Clio."""
     cleared_fields = []
@@ -999,9 +1038,9 @@ def suggest_new_label(bodyids):
 
         print(f"{roi}{new_id:03}m ({roi_in[roi]:.2%})")
 
+
 def is_root_id(x):
     """Check if the ID is a root ID (as opposed to a body ID)."""
     if not isinstance(x, (np.ndarray, tuple, list)):
         x = [x]
     return np.array([len(str(i)) > 15 for i in x])
-
