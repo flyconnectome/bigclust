@@ -326,6 +326,14 @@ class DendrogramControls(QtWidgets.QWidget):
         self.suggest_type_button.clicked.connect(self.suggest_type)
         self.tab2_layout.addWidget(self.suggest_type_button)
 
+        # Add button to suggest new CB type
+        self.suggest_cb_type_button = QtWidgets.QPushButton("Suggest new CB-type")
+        self.suggest_cb_type_button.setToolTip(
+            "Suggest new CBXXXX type."
+        )
+        self.suggest_cb_type_button.clicked.connect(self.suggest_cb_type)
+        self.tab2_layout.addWidget(self.suggest_cb_type_button)
+
         # This makes it so the legend does not stretch
         self.tab2_layout.addStretch(1)
 
@@ -595,6 +603,12 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # Threading this doesn't make much sense
         suggest_new_label(bodyids=bodyids)
+
+    def suggest_cb_type(self):
+        """Suggest a new CB type."""
+        # Threading this doesn't make much sense
+        import ftu
+        print("Next free CB tyoe:", ftu.info.get_next_cb_id())
 
     def set_add_group(self):
         """Set whether to add neurons as group when selected."""
