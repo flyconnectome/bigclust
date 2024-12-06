@@ -33,6 +33,7 @@ class NglViewer:
         neuropil_source=None,
         debug=False,
         max_threads=20,
+        title="Octarine Viewer"
     ):
         self.debug = debug
         self.data = data.rename({"segment_id": "id"}, axis=1).astype({"id": int}).set_index('id')
@@ -43,7 +44,7 @@ class NglViewer:
         for url in self.data.source.unique():
             self.volumes[url] = self.make_volume(url)
 
-        self.viewer = oc.Viewer()
+        self.viewer = oc.Viewer(title=title)
         self._centered = False
 
         self._neuropil_mesh = neuropil_mesh
