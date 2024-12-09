@@ -33,7 +33,7 @@ rather than running the clustering itself.
 
 Minimally, you will need:
 1. A [linkage](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html) describing the dendrogram.
-2. A pandas DataFrame with meta data for the original observations.
+2. A pandas DataFrame with meta data (labels, cluster assigment, etc.) for the original observations.
 
 We are using `bigclust` for clustering large number of neurons. Therefore `bigclust` also provides a Neuroglancer-like widget to explore
 morphology and a connectivity widget.
@@ -61,10 +61,10 @@ np.save("linkage.npy", Z, allow_pickle=False)
 t = cl.to_table(cl.extract_homogeneous_clusters(max_dist=2, min_dist=.1, linkage=Z), linkage=Z)
 
 # Save and make sure the order is the same as in our distance matrix
-t.set_index("id").reindex(index).reset_index(drop=False).to_feather("cosine_table.feather")
+t.set_index("id").reindex(cl.dists_.index).reset_index(drop=False).to_feather("cosine_table.feather")
 ```
 
-_*feel free to use more sensible file names_
+*Feel free to use more sensible file names. If you do, you have to adjust the code below accordingly.*
 
 ### Step 3: Write a start-up script
 
