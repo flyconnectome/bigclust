@@ -357,6 +357,15 @@ class Dendrogram(Figure):
         return self._labels[self._leafs_order[self.selected]]
 
     @property
+    def selected_meta(self):
+        """Return the metadata of selected leafs in the dendrogram."""
+        if self.selected is None or not len(self.selected):
+            return None
+        if self._table is None:
+            raise ValueError("No metadata was provided.")
+        return self._table.iloc[self._leafs_order[self.selected]]
+
+    @property
     def selected(self):
         """Return the selected leafs in the dendrogram."""
         return self._selected
