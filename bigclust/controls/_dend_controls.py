@@ -261,14 +261,19 @@ class DendrogramControls(QtWidgets.QWidget):
         self.set_label = QtWidgets.QLabel("Which fields to set:")
         self.tab2_layout.addWidget(self.set_label)
 
-        self.set_flywire_check = QtWidgets.QCheckBox("Clio: flywire_type")
-        self.set_flywire_check.setToolTip("Set the `flywire_type` field in Clio")
-        self.set_flywire_check.setChecked(True)
-        self.tab2_layout.addWidget(self.set_flywire_check)
-
         self.set_type_check = QtWidgets.QCheckBox("Clio: type")
         self.set_type_check.setToolTip("Set the `type` field in Clio")
         self.tab2_layout.addWidget(self.set_type_check)
+
+        self.set_flywire_check = QtWidgets.QCheckBox("Clio: flywire_type")
+        self.set_flywire_check.setToolTip("Set the `flywire_type` field in Clio")
+        self.set_flywire_check.setChecked(False)
+        self.tab2_layout.addWidget(self.set_flywire_check)
+
+        self.set_manc_check = QtWidgets.QCheckBox("Clio: manc_type")
+        self.set_manc_check.setToolTip("Set the `manc_type` field in Clio")
+        self.set_manc_check.setChecked(False)
+        self.tab2_layout.addWidget(self.set_manc_check)
 
         self.set_mcns_type_check = QtWidgets.QCheckBox("FlyTable: malecns_type")
         self.set_mcns_type_check.setToolTip("Set the `malecns_type` field in FlyTable")
@@ -328,9 +333,7 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # Add button to suggest new CB type
         self.suggest_cb_type_button = QtWidgets.QPushButton("Suggest new CB-type")
-        self.suggest_cb_type_button.setToolTip(
-            "Suggest new CBXXXX type."
-        )
+        self.suggest_cb_type_button.setToolTip("Suggest new CBXXXX type.")
         self.suggest_cb_type_button.clicked.connect(self.suggest_cb_type)
         self.tab2_layout.addWidget(self.suggest_cb_type_button)
 
@@ -377,12 +380,9 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No selection", color="red", duration=2)
             return
 
-        # Get the male CNS IDs
-        from fafbseg import flywire
-
-        is_root = is_root_id(selected_ids)
-        bodyids = selected_ids[~is_root]
-        rootids = selected_ids[is_root]
+        # Extract FlyWire root and MaleCNS body IDs from the selected IDs
+        # N.B. This requires meta data to be present.
+        rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         # Get the annotation
         import clio
@@ -411,6 +411,7 @@ class DendrogramControls(QtWidgets.QWidget):
                 self.set_flywire_check.isChecked(),
                 self.set_type_check.isChecked(),
                 self.set_mcns_type_check.isChecked(),
+                self.set_manc_check.isChecked(),
             )
         ):
             self.figure.show_message("No fields to push", color="red", duration=2)
@@ -426,9 +427,9 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No label to push", color="red", duration=2)
             return
 
-        is_root = is_root_id(selected_ids)
-        bodyids = selected_ids[~is_root]
-        rootids = selected_ids[is_root]
+        # Extract FlyWire root and MaleCNS body IDs from the selected IDs
+        # N.B. This requires meta data to be present.
+        rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         # Get the annotation
         import clio
@@ -439,42 +440,20 @@ class DendrogramControls(QtWidgets.QWidget):
 
         import ftu
 
-        # if self.set_sanity_check.isChecked():
-        #     import cocoa as cc
-        #     global CLIO_ANN
-        #     if CLIO_ANN is None:
-        #         print("Fetching Clio annotations...")
-        #         CLIO_ANN = cc.MaleCNS().get_annotations()
-
-        #     global FLYWIRE_ANN
-        #     if FLYWIRE_ANN is None:
-        #         FLYWIRE_ANN = cc.FlyWire(live_annot=True).get_annotations()
-
-        #     for t in label.split(','):
-        #         if t not in FLYWIRE_ANN.cell_type.unique() and t not in FLYWIRE_ANN.hemibrain_type.unique():
-        #             self.figure.show_message(f'Label {t} not found in FlyWire annotations', color="red", duration=2)
-
-        #     if label in CLIO_ANN.flywire_type.values:
-        #         self.figure.show_message(f'Label {label} already in Clio', color="red", duration=2)
-        #         return
-
-        #     # Update the annotations
-        #     if self.set_flywire_check.isChecked():
-        #         CLIO_ANN.loc[CLIO_ANN.bodyId.isin(bodyids), 'flywire_type'] = label
-        #     if self.set_type_check.isChecked():
-        #         CLIO_ANN.loc[CLIO_ANN.bodyId.isin(bodyids), 'type'] = label
-
         # Submit the annotations
         self.futures[(label, uuid.uuid4())] = self.pool.submit(
             _push_annotations,
             label=label,
             bodyids=bodyids
-            if self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
+            if self.set_flywire_check.isChecked()
+            or self.set_type_check.isChecked()
+            or self.set_manc_check.isChecked()
             else None,
             rootids=rootids if self.set_mcns_type_check.isChecked() else None,
             set_flywire=self.set_flywire_check.isChecked(),
             set_type=self.set_type_check.isChecked(),
             set_mcns_type=self.set_mcns_type_check.isChecked(),
+            set_manc_type=self.set_manc_check.isChecked(),
             clio=clio,  #  pass the module
             ftu=ftu,  #  pass the module
             figure=self.figure,
@@ -487,24 +466,6 @@ class DendrogramControls(QtWidgets.QWidget):
                 CLIO_ANN.get("bodyId", CLIO_ANN.get("bodyid")).isin(bodyids), "type"
             ] = label
 
-        # if (
-        #     self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
-        # ) and self.set_mcns_type_check.isChecked():
-        #     msg = f"Set {label} for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
-        # elif self.set_flywire_check.isChecked() or self.set_type_check.isChecked():
-        #     msg = f"Set {label} for {len(bodyids)} male CNS neurons"
-        # elif self.set_mcns_type_check.isChecked():
-        #     msg = f"Set {label} for {len(rootids)} FlyWire neurons"
-
-        # self.figure.show_message(msg, color="lightgreen", duration=2)
-        # print(f"{msg}:")
-        # if len(bodyids) and (
-        #     self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
-        # ):
-        #     print("  ", bodyids)
-        # if len(rootids) and self.set_mcns_type_check.isChecked():
-        #     print("  ", rootids)
-
     def clear_annotation(self):
         """Clear the currently selected fields."""
         if not any(
@@ -512,6 +473,7 @@ class DendrogramControls(QtWidgets.QWidget):
                 self.set_flywire_check.isChecked(),
                 self.set_type_check.isChecked(),
                 self.set_mcns_type_check.isChecked(),
+                self.set_manc_check.isChecked(),
             )
         ):
             self.figure.show_message("No fields to clear", color="red", duration=2)
@@ -522,9 +484,9 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No neurons selected", color="red", duration=2)
             return
 
-        is_root = is_root_id(selected_ids)
-        bodyids = selected_ids[~is_root]
-        rootids = selected_ids[is_root]
+        # Extract FlyWire root and MaleCNS body IDs from the selected IDs
+        # N.B. This requires meta data to be present.
+        rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         # Get the annotation
         import clio
@@ -539,12 +501,15 @@ class DendrogramControls(QtWidgets.QWidget):
         self.futures[uuid.uuid4()] = self.pool.submit(
             _clear_annotations,
             bodyids=bodyids
-            if self.set_flywire_check.isChecked() or self.set_type_check.isChecked()
+            if self.set_flywire_check.isChecked()
+            or self.set_type_check.isChecked()
+            or self.set_manc_check.isChecked()
             else None,
             rootids=rootids if self.set_mcns_type_check.isChecked() else None,
             clear_flywire=self.set_flywire_check.isChecked(),
             clear_type=self.set_type_check.isChecked(),
             clear_mcns_type=self.set_mcns_type_check.isChecked(),
+            clear_manc_type=self.set_manc_check.isChecked(),
             clio=clio,  #  pass the module
             ftu=ftu,  #  pass the module
             figure=self.figure,
@@ -558,8 +523,9 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No selection", color="red", duration=2)
             return
 
-        is_root = is_root_id(selected_ids)
-        bodyids = selected_ids[~is_root]
+        # MaleCNS body IDs from the selected IDs
+        # N.B. This requires meta data to be present.
+        _, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         if not len(bodyids):
             self.figure.show_message(
@@ -592,8 +558,9 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No selection", color="red", duration=2)
             return
 
-        is_root = is_root_id(selected_ids)
-        bodyids = selected_ids[~is_root]
+        # Extract FlyWire root and MaleCNS body IDs from the selected IDs
+        # N.B. This requires meta data to be present.
+        _, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         if not len(bodyids):
             self.figure.show_message(
@@ -608,6 +575,7 @@ class DendrogramControls(QtWidgets.QWidget):
         """Suggest a new CB type."""
         # Threading this doesn't make much sense
         import ftu
+
         print("Next free CB tyoe:", ftu.info.get_next_cb_id())
 
     def set_add_group(self):
@@ -775,18 +743,22 @@ def _push_annotations(
     set_flywire=True,
     set_type=True,
     set_mcns_type=True,
+    set_manc_type=True,
     figure=None,
     controls=None,
 ):
     """Push the current annotation to Clio/FlyTable."""
     try:
         if bodyids is not None and len(bodyids):
-            if set_flywire and set_type:
-                clio.set_fields(bodyids, flywire_type=label, type=label)
-            elif set_flywire:
-                clio.set_fields(bodyids, flywire_type=label)
-            elif set_type:
-                clio.set_fields(bodyids, type=label)
+            kwargs = {}
+            if set_flywire:
+                kwargs["flywire_type"] = label
+            if set_type:
+                kwargs["type"] = label
+            if set_manc_type:
+                kwargs["manc_type"] = label
+
+            clio.set_fields(bodyids, **kwargs)
 
         if set_mcns_type and rootids is not None and len(rootids):
             ftu.info.update_fields(
@@ -797,22 +769,23 @@ def _push_annotations(
                 dry_run=False,
             )
 
-        if (set_flywire or set_type) and set_mcns_type:
+        set_any_malecns = set_mcns_type or set_manc_type or set_type
+        if set_any_malecns and set_mcns_type:
             msg = f"Set {label} for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
-        elif set_flywire or set_type:
+        elif set_flywire or set_type or set_manc_type:
             msg = f"Set {label} for {len(bodyids)} male CNS neurons"
         elif set_mcns_type:
             msg = f"Set {label} for {len(rootids)} FlyWire neurons"
 
         print(f"{msg}:")
-        if bodyids is not None and len(bodyids) and (set_flywire or set_type):
+        if bodyids is not None and len(bodyids) and set_any_malecns:
             print("  ", bodyids)
         if rootids is not None and len(rootids) and set_mcns_type:
             print("  ", rootids)
 
         if figure:
             # Update the labels in the dendrogram
-            if (set_flywire or set_type) and bodyids is not None:
+            if set_any_malecns and bodyids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
                 figure.set_leaf_label(ind, f"{label}(!)")
                 controls.label_overrides.update({i: f"{label}(!)" for i in ind})
@@ -889,6 +862,7 @@ def _clear_annotations(
     clear_flywire=True,
     clear_type=True,
     clear_mcns_type=True,
+    clear_manc_type=True,
     figure=None,
     controls=None,
 ):
@@ -897,15 +871,18 @@ def _clear_annotations(
     cleared_ids = []
     try:
         if bodyids is not None and len(bodyids):
-            if clear_flywire and clear_type:
-                clio.set_fields(bodyids, flywire_type=None, type=None)
-                cleared_fields += ["`type`", "`flywire_type`"]
-            elif clear_flywire:
-                clio.set_fields(bodyids, flywire_type=None)
+            kwargs = {}
+            if clear_type:
+                kwargs["type"] = None
+                cleared_fields += ["`type`"]
+            if clear_flywire:
+                kwargs["flywire_type"] = None
                 cleared_fields.append("`flywire_type`")
-            elif clear_type:
-                clio.set_fields(bodyids, type=None)
-                cleared_fields.append("`type`")
+            if clear_manc_type:
+                kwargs["manc_type"] = None
+                cleared_fields.append("`manc_type`")
+
+            clio.set_fields(bodyids, **kwargs)
             cleared_ids.append(f"{len(bodyids)} maleCNS")
 
         if clear_mcns_type and rootids is not None and len(rootids):
@@ -929,7 +906,7 @@ def _clear_annotations(
 
         if figure:
             # Update the labels in the dendrogram
-            if (clear_flywire or clear_type) and bodyids is not None:
+            if (clear_flywire or clear_type or clear_manc_type) and bodyids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
                 figure.set_leaf_label(ind, "(cleared)(!)")
                 controls.label_overrides.update({i: "(cleared)(!)" for i in ind})
@@ -1048,7 +1025,52 @@ def suggest_new_label(bodyids):
 
 
 def is_root_id(x):
-    """Check if the ID is a root ID (as opposed to a body ID)."""
+    """Check if the ID is a root ID (as opposed to a body ID) based on its length."""
     if not isinstance(x, (np.ndarray, tuple, list)):
         x = [x]
     return np.array([len(str(i)) > 15 for i in x])
+
+
+def sort_ids(ids, meta):
+    """Sort given IDs into FlyWire root IDs and male CNS body IDs.
+
+    Parameters
+    ----------
+    ids :       array-like
+                IDs to sort.
+    meta :      DataFrame
+                Meta data for the neurons. Order should match the IDs.
+                This is used to determine whether the IDs are FlyWire root IDs
+                or Male CNS body IDs. This requires are `dataset` column
+                which, by convention, uses e.g. `Fw` or `FlyWire` + a side suffix
+                for FlyWire and `Mcns` or `MaleCNS` + a side suffix for the
+                Male CNS.
+
+    Returns
+    -------
+    rootids :   array-like
+                FlyWire root IDs.
+    bodyids :   array-like
+                Male CNS body IDs.
+
+    """
+    ids = np.asarray(ids)
+
+    assert "dataset" in meta.columns, "Meta data must have a 'dataset' column"
+
+    # Process dataset column
+    dataset_lower = meta.dataset.fillna("").str.lower()
+
+    # Get FlyWire root IDs
+    is_fw_root = dataset_lower.str.startswith("fw") | dataset_lower.str.startswith(
+        "flywire"
+    )
+    rootids = ids[is_fw_root]
+
+    # Get MaleCNS body IDs
+    is_mcns = dataset_lower.str.startswith("mcns") | dataset_lower.str.startswith(
+        "malecns"
+    )
+    bodyids = ids[is_mcns]
+
+    return rootids, bodyids
