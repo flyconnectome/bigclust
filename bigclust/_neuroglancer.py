@@ -58,6 +58,8 @@ class NglViewer:
         # Holds the futures for requested data
         self.futures = {}
         self.n_failed = 0  # track the number of failed requests
+        self._futures_check_rate = 20 # check every 20 frames
+        self._futures_check_counter = 0  # counter for checking futures
         self.pool = ThreadPoolExecutor(max_threads)
 
         # Tracks which neurons we've already loaded
@@ -298,6 +300,15 @@ class NglViewer:
 
     def check_futures(self):
         """Check if any futures are done."""
+        # Skip if we're not checking this frame
+        if self._futures_check_counter % self._futures_check_rate:
+            self._futures_check_counter += 1
+            return
+
+        # Reset the counter
+        self._futures_check_counter = 0
+
+        # Keep track of whether we had any futures at the beginning
         has_futures = len(self.futures) > 0
 
         for (id, name), future in self.futures.items():
