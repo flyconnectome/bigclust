@@ -1112,7 +1112,7 @@ class LabelSearch:
     def __init__(self, dendrogram, label, rotate=True, go_to_first=True, regex=False):
         self.dendrogram = dendrogram
         self.label = label
-        self._ix = 0
+        self._ix = None  # start with no index (will be initialized in `next` or `prev`)
         self.regex = regex
         self._rotate = rotate
 
@@ -1158,7 +1158,9 @@ class LabelSearch:
 
     def next(self):
         """Go to the next label."""
-        if self._ix >= (len(self.indices) - 1):
+        if self._ix is None:
+            self._ix = 0
+        elif self._ix >= (len(self.indices) - 1):
             if not self._rotate:
                 raise StopIteration
             else:
@@ -1173,11 +1175,13 @@ class LabelSearch:
 
     def prev(self):
         """Go to the previous label."""
-        if self._ix <= 0:
+        if self._ix is None:
+            self._ix = len(self.indices) - 1
+        elif self._ix <= 0:
             if not self._rotate:
                 raise StopIteration
             else:
-                self._ix = len(self.indices)
+                self._ix = len(self.indices) - 1
         else:
             self._ix -= 1
 
