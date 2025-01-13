@@ -769,7 +769,7 @@ def _push_annotations(
                 dry_run=False,
             )
 
-        set_any_malecns = set_mcns_type or set_manc_type or set_type
+        set_any_malecns = set_flywire or set_manc_type or set_type
         if set_any_malecns and set_mcns_type:
             msg = f"Set {label} for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
         elif set_flywire or set_type or set_manc_type:
