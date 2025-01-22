@@ -486,7 +486,7 @@ class Dendrogram(Figure):
         for t in self._label_visuals:
             if isinstance(t, gfx.Text):
                 t.geometry.font_size = size
-        for t in self._hinge_label_visuals:
+        for t in getattr(self, '_hinge_label_visuals', []):
             if isinstance(t, gfx.Text):
                 t.geometry.font_size = size * 0.75
 
