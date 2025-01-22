@@ -36,20 +36,23 @@ class Dendrogram(Figure):
                     The linkage matrix from `scipy.cluster.hierarchy.linkage`.
     table :         A pandas Dataframe containing cluster metadata.
                     Must match the order of rows in the original distance matrix.
-    labels :        String, optional
+    labels :        str, optional
                     Name of column containing labels for the leaves in the dendrogram.
-    clusters :      String, optional
+    clusters :      str, optional
                     Name of column containings labels for each leaf in the dendrogram.
                     Order of clusters must match the order of labels in the original distance matrix.
     cluster_colors : dict | str, optional
                     Dictionary of cluster colors. If None, a default palette is used. If string,
                     must be the name of a color palette from the `cmap` module.
-    hover_info :    String optional
+    hover_info :    str, optional
                     Either the name of a column containing or hover information or a format string that
                     can reference multiple columns. Hover info must exist for each leaf in the dendrogram.
                     If given, hovering over a leaf will show the corresponding info.
-    leaf_types :    String optional
+    leaf_types :    str, optional
                     Column name specifying types for each leaf. Each unique type will be assigned a different marker.
+    hinge_labels :  iterable, optional
+                    List of labels to show at the hinge points of the dendrogram where clusters are merged.
+                    Expected to match order of linkage.
     **kwargs :      dict, optional
                     Additional keyword arguments are passed to the `Figure` class.
 
@@ -69,6 +72,7 @@ class Dendrogram(Figure):
         cluster_colors=None,
         hover_info="hover_info",
         leaf_types="dataset",
+        hinge_labels=None,
         **kwargs,
     ):
         super().__init__(size=(1000, 400), **kwargs)
@@ -124,6 +128,21 @@ class Dendrogram(Figure):
         if self._clusters is not None:
             adjust_linkage_colors(self._dendrogram, self._clusters, cluster_colors)
 
+        self._hinge_labels = np.asarray(hinge_labels) if hinge_labels is not None else None
+        if self._hinge_labels is not None:
+            assert len(self._hinge_labels) == len(self._linkage), "Hinge labels must match the linkage matrix."
+
+            # Calculate the position of the hinge labels in the dendrogram
+            import cocoa as cc
+            # This is an (N, 2) array of x/y coordinates for our N hinge labels
+            self._hinge_label_pos = cc.cluster_utils.map_linkage_to_dendrogram(self._dendrogram, self._linkage)
+            # The coordinates match the coordinates on the matplotlib figure where the x coordinate is (index + 0.5) * 10
+            # Because bigclust is using its own x-spacing, we need to adjust the x coordinates
+            self._hinge_label_pos[:, 0] = self._hinge_label_pos[:, 0] / 10 * self.x_spacing
+
+            # Prepare the visuals for the hinge labels
+            self._hinge_label_visuals = [None] * len(self._hinge_labels)
+
         # Add the selection gizmo
         self.selection_gizmo = SelectionGizmo(
             self.renderer,
@@ -148,6 +167,10 @@ class Dendrogram(Figure):
         self._label_group = gfx.Group()
         self._label_group.visible = True
         self._text_group.add(self._label_group)
+
+        self._hinge_label_group = gfx.Group()
+        self._hinge_label_group.visible = True
+        self._text_group.add(self._hinge_label_group)
 
         # Setup hover info
         if hover_info is not None:
@@ -254,24 +277,34 @@ class Dendrogram(Figure):
 
             self._control_label_vis_every_n = 1
 
-            if not self._label_group.visible:
-                return
+            if self._labels is not None and self._label_group.visible:
+                # Check which leafs are currently visible
+                pos = np.zeros((len(self), 2))
+                pos[:, 0] = (np.arange(len(self)) + 0.5) * self.x_spacing
+                iv = self.is_visible_pos(pos)
 
-            # Check which leafs are currently visible
-            pos = np.zeros((len(self), 2))
-            pos[:, 0] = (np.arange(len(self)) + 0.5) * self.x_spacing
-            iv = self.is_visible_pos(pos)
+                # If more than the limit, don't show any labels
+                if iv.sum() > self.label_vis_limit:
+                    for i, t in enumerate(self._label_group.children):
+                        t.visible = False
+                else:
+                    self.show_labels(np.where(iv)[0])
+                    self.hide_labels(np.where(~iv)[0])
 
-            # If more than 100 don't show any labels
-            if iv.sum() > self.label_vis_limit:
-                for i, t in enumerate(self._label_group.children):
-                    t.visible = False
-            else:
-                self.show_labels(np.where(iv)[0])
-                self.hide_labels(np.where(~iv)[0])
+            if self._hinge_labels is not None and self._hinge_label_group.visible:
+                # Check which hinge labels are currently visible
+                iv = self.is_visible_pos(self._hinge_label_pos)
+
+                # If more than the limit, don't show any labels
+                if iv.sum() > self.label_vis_limit:
+                    for i, t in enumerate(self._hinge_label_group.children):
+                        t.visible = False
+                else:
+                    self.show_hinge_labels(np.where(iv)[0])
+                    self.hide_hinge_labels(np.where(~iv)[0])
 
         # Turns out this is too slow to be run every frame - we're throttling it to every 30 frames
-        if self._labels is not None:
+        if self._labels is not None or self._hinge_labels is not None:
             self._control_label_vis_every_n = 1
             self.add_animation(_control_label_vis)
 
@@ -453,6 +486,9 @@ class Dendrogram(Figure):
         for t in self._label_visuals:
             if isinstance(t, gfx.Text):
                 t.geometry.font_size = size
+        for t in self._hinge_label_visuals:
+            if isinstance(t, gfx.Text):
+                t.geometry.font_size = size * 0.75
 
         # The hover widget is basically set up such that the text is size 1
         # So we just scale the whole thing accordingly when the font size changes
@@ -499,8 +535,9 @@ class Dendrogram(Figure):
         def _set_yscale(t, y):
             if isinstance(t, gfx.Text):
                 # Text below the dendrogram does not have to be adjusted
-                if t.local.y > 0:
-                    t.local.y = t._absolute_position_y * y
+                if t.local.y <= 0:
+                    return
+                t.local.y = t._absolute_position_y * y
 
         self._text_group.traverse(lambda t: _set_yscale(t, y), skip_invisible=False)
 
@@ -819,8 +856,8 @@ class Dendrogram(Figure):
         Parameters
         ----------
         which : list, optional
-                List of indices into the dendrogram (left to right) for which to show
-                the labels. If None, all labels are shown.
+                List of indices into the dendrogram (left to right) for which to hide
+                the labels. If None, all labels are hidden.
 
         """
         if self._labels is None:
@@ -846,6 +883,78 @@ class Dendrogram(Figure):
     def toggle_labels(self):
         """Toggle the visibility of labels."""
         self._label_group.visible = not self._label_group.visible
+
+    def show_hinge_labels(self, which=None):
+        """Show labels for hinges.
+
+        Parameters
+        ----------
+        which : list, optional
+                List of indices into the linkage for which to show
+                the labels. If None, all hinge labels are shown.
+
+        """
+        if self._hinge_labels is None:
+            return
+
+        if which is None:
+            which = np.arange(len(self._hinge_labels))
+        elif isinstance(which, Number):
+            which = np.array([which])
+        elif isinstance(which, list):
+            which = np.array(which)
+
+        if not isinstance(which, (list, np.ndarray)):
+            raise ValueError(f"Expected list or array, got {type(which)}.")
+
+        for ix in which:
+            if self._hinge_label_visuals[ix] is None:
+                pos = tuple(self._hinge_label_pos[ix])
+                t = text2gfx(
+                    str(self._hinge_labels[ix]),
+                    position=(pos[0], pos[1] * self._dendrogram_group.local.scale_y, 0),
+                    font_size=self.font_size * 0.75,
+                    color=(1, 1, 1, 1),
+                    anchor="bottommiddle",
+                    pickable=False,
+                )
+
+                # Track the label and add to scene
+                self._hinge_label_visuals[ix] = t
+                self._hinge_label_group.add(t)
+
+                # Track where this label is supposed to show up (for scaling)
+                t._absolute_position_x = pos[0]
+                t._absolute_position_y = pos[1]
+
+            self._hinge_label_visuals[ix].visible = True
+    def hide_hinge_labels(self, which=None):
+        """Hide labels for hinges.
+
+        Parameters
+        ----------
+        which : list, optional
+                List of indices into the linkage for which to hide
+                the labels. If None, all hinge labels are hidden.
+
+        """
+        if self._hinge_labels is None:
+            return
+
+        if which is None:
+            which = np.arange(len(self))
+        elif isinstance(which, int):
+            which = np.array([which])
+        elif isinstance(which, list):
+            which = np.array(which)
+
+        if not isinstance(which, (list, np.ndarray)):
+            raise ValueError(f"Expected list or array, got {type(which)}.")
+
+        for ix in which:
+            if self._hinge_label_visuals[ix] is None:
+                continue
+            self._hinge_label_visuals[ix].visible = False
 
     def show_controls(self):
         """Show controls."""
