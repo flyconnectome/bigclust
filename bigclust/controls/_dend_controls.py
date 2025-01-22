@@ -816,12 +816,12 @@ def _push_dimorphism(
     """Push dimorphism status to Clio/FlyTable."""
     try:
         if bodyids is not None and len(bodyids):
-            label = dimorphism.replace("sex-specific", "male-specific")
+            label = dimorphism.replace("sex-specific", "male-specific") if dimorphism else None
 
             clio.set_fields(bodyids, dimorphism=label)
 
         if rootids is not None and len(rootids):
-            label = dimorphism.replace("sex-specific", "female-specific")
+            label = dimorphism.replace("sex-specific", "female-specific") if dimorphism else None
 
             ftu.info.update_fields(
                 rootids, dimorphism=label, id_col="root_783", dry_run=False
