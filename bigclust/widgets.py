@@ -196,7 +196,7 @@ class ConnectivityTable(QtWidgets.QWidget):
 
     """
 
-    def __init__(self, data, figure=None, width=600, height=400):
+    def __init__(self, data, figure=None, width=600, height=400, title="Connectivity widget"):
         assert isinstance(data, pd.DataFrame), "data must be a pandas DataFrame"
 
         super().__init__()
@@ -206,7 +206,7 @@ class ConnectivityTable(QtWidgets.QWidget):
 
         self._data = data
         self._figure = figure
-        self.setWindowTitle("Connectivity")
+        self.setWindowTitle(title)
         self.resize(width, height)
 
         # Set up layout
