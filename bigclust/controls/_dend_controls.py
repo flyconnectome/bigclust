@@ -26,6 +26,18 @@ FLYWIRE_ANN = None
 HB_ANN = None
 
 
+def requires_selection(func):
+    """Decorator to check if a selection is required."""
+
+    def wrapper(self, *args, **kwargs):
+        if self.figure.selected_ids is None or len(self.figure.selected_ids) == 0:
+            self.figure.show_message("No neurons selected", color="red", duration=2)
+            return
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 class DendrogramControls(QtWidgets.QWidget):
     def __init__(self, figure, labels=[], datasets=[], width=200, height=400):
         super().__init__()
@@ -321,13 +333,19 @@ class DendrogramControls(QtWidgets.QWidget):
             lambda x: self.selected_set_dimorphism(None)
         )
 
+        # Make a separate layout with tighter margins for the buttons
+        button_layout = QtWidgets.QVBoxLayout()
+        button_layout.setSpacing(0)  # No space between buttons
+        button_layout.setContentsMargins(0, 0, 0, 0)  # No margins around the buttons
+        self.tab2_layout.addLayout(button_layout)
+
         # Add button to set new Clio group
-        self.clio_group_button = QtWidgets.QPushButton("New Clio group")
+        self.clio_group_button = QtWidgets.QPushButton("Set new Clio group")
         self.clio_group_button.setToolTip(
             "Assign new Clio group. This will use the lowest body ID as group ID."
         )
         self.clio_group_button.clicked.connect(self.new_clio_group)
-        self.tab2_layout.addWidget(self.clio_group_button)
+        button_layout.addWidget(self.clio_group_button)
 
         # Add button to suggest new MCNS type
         self.suggest_type_button = QtWidgets.QPushButton("Suggest male-only type")
@@ -335,13 +353,21 @@ class DendrogramControls(QtWidgets.QWidget):
             "Suggest new male-only type based on main input neuropil(s). See console for output."
         )
         self.suggest_type_button.clicked.connect(self.suggest_type)
-        self.tab2_layout.addWidget(self.suggest_type_button)
+        button_layout.addWidget(self.suggest_type_button)
 
         # Add button to suggest new CB type
         self.suggest_cb_type_button = QtWidgets.QPushButton("Suggest new CB-type")
         self.suggest_cb_type_button.setToolTip("Suggest new CBXXXX type.")
         self.suggest_cb_type_button.clicked.connect(self.suggest_cb_type)
-        self.tab2_layout.addWidget(self.suggest_cb_type_button)
+        button_layout.addWidget(self.suggest_cb_type_button)
+
+        # Add button to set new super type
+        self.set_supertype_button = QtWidgets.QPushButton("Set new SuperType")
+        self.set_supertype_button.setToolTip(
+            "Assign selected neurons to a supertype. This will use the lowest ID as supertype ID."
+        )
+        self.set_supertype_button.clicked.connect(self.new_super_type)
+        button_layout.addWidget(self.set_supertype_button)
 
         # This makes it so the legend does not stretch
         self.tab2_layout.addStretch(1)
@@ -372,6 +398,7 @@ class DendrogramControls(QtWidgets.QWidget):
                 continue
             self.ann_combo_box.addItem(label)
 
+    @requires_selection
     def selected_set_dimorphism(self, dimorphism):
         """Push dimorphism to Clio/FlyTable."""
         assert dimorphism in (
@@ -382,9 +409,6 @@ class DendrogramControls(QtWidgets.QWidget):
             None,
         )
         selected_ids = self.figure.selected_ids
-        if selected_ids is None:
-            self.figure.show_message("No selection", color="red", duration=2)
-            return
 
         # Extract FlyWire root and MaleCNS body IDs from the selected IDs
         # N.B. This requires meta data to be present.
@@ -410,6 +434,7 @@ class DendrogramControls(QtWidgets.QWidget):
             figure=self.figure,
         )
 
+    @requires_selection
     def push_annotation(self):
         """Push the current annotation to Clio/FlyTable."""
         if not any(
@@ -424,17 +449,13 @@ class DendrogramControls(QtWidgets.QWidget):
             return
 
         label = self.ann_combo_box.currentText()
-        selected_ids = self.figure.selected_ids
-        if selected_ids is None:
-            self.figure.show_message("No selection", color="red", duration=2)
-            return
-
         if not label:
             self.figure.show_message("No label to push", color="red", duration=2)
             return
 
         # Extract FlyWire root and MaleCNS body IDs from the selected IDs
         # N.B. This requires meta data to be present.
+        selected_ids = self.figure.selected_ids
         rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         # Get the annotation
@@ -472,6 +493,7 @@ class DendrogramControls(QtWidgets.QWidget):
                 CLIO_ANN.get("bodyId", CLIO_ANN.get("bodyid")).isin(bodyids), "type"
             ] = label
 
+    @requires_selection
     def clear_annotation(self):
         """Clear the currently selected fields."""
         if not any(
@@ -485,13 +507,9 @@ class DendrogramControls(QtWidgets.QWidget):
             self.figure.show_message("No fields to clear", color="red", duration=2)
             return
 
-        selected_ids = self.figure.selected_ids
-        if selected_ids is None:
-            self.figure.show_message("No neurons selected", color="red", duration=2)
-            return
-
         # Extract FlyWire root and MaleCNS body IDs from the selected IDs
         # N.B. This requires meta data to be present.
+        selected_ids = self.figure.selected_ids
         rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         # Get the annotation
@@ -522,15 +540,43 @@ class DendrogramControls(QtWidgets.QWidget):
             controls=self,
         )
 
+    @requires_selection
+    def new_super_type(self):
+        """Set a new super type for given IDs."""
+        # N.B. This requires meta data to be present.
+        selected_ids = self.figure.selected_ids
+        rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
+
+        # New type name
+        new_type = min(selected_ids)
+
+        # Get the clio module
+        import clio
+
+        global CLIO_CLIENT
+        if CLIO_CLIENT is None:
+            CLIO_CLIENT = clio.Client(dataset="CNS")
+
+        import ftu
+
+        # Submit the annotations
+        self.futures[(new_type, uuid.uuid4())] = self.pool.submit(
+            _push_super_type,
+            super_type=new_type,
+            bodyids=bodyids,
+            rootids=rootids,
+            clio=clio,  #  pass the module
+            sanity_checks=self.set_sanity_check.isChecked(),
+            ftu=ftu,
+            figure=self.figure,
+        )
+
+    @requires_selection
     def new_clio_group(self):
         """Set a new Clio group for given IDs."""
-        selected_ids = self.figure.selected_ids
-        if selected_ids is None:
-            self.figure.show_message("No selection", color="red", duration=2)
-            return
-
         # MaleCNS body IDs from the selected IDs
         # N.B. This requires meta data to be present.
+        selected_ids = self.figure.selected_ids
         _, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
         if not len(bodyids):
@@ -557,13 +603,10 @@ class DendrogramControls(QtWidgets.QWidget):
             figure=self.figure,
         )
 
+    @requires_selection
     def suggest_type(self):
         """Suggest a new male-only type for given IDs."""
         selected_ids = self.figure.selected_ids
-        if selected_ids is None:
-            self.figure.show_message("No selection", color="red", duration=2)
-            return
-
         # Extract FlyWire root and MaleCNS body IDs from the selected IDs
         # N.B. This requires meta data to be present.
         _, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
@@ -826,12 +869,20 @@ def _push_dimorphism(
     """Push dimorphism status to Clio/FlyTable."""
     try:
         if bodyids is not None and len(bodyids):
-            label = dimorphism.replace("sex-specific", "male-specific") if dimorphism else None
+            label = (
+                dimorphism.replace("sex-specific", "male-specific")
+                if dimorphism
+                else None
+            )
 
             clio.set_fields(bodyids, dimorphism=label)
 
         if rootids is not None and len(rootids):
-            label = dimorphism.replace("sex-specific", "female-specific") if dimorphism else None
+            label = (
+                dimorphism.replace("sex-specific", "female-specific")
+                if dimorphism
+                else None
+            )
 
             ftu.info.update_fields(
                 rootids, dimorphism=label, id_col="root_783", dry_run=False
@@ -859,6 +910,78 @@ def _push_dimorphism(
         if figure:
             figure.show_message(
                 "Error pushing dimorphism status (see console)", color="red", duration=2
+            )
+        traceback.print_exc()
+        raise
+
+
+def _push_super_type(
+    super_type,
+    bodyids,
+    rootids,
+    clio,
+    ftu,
+    sanity_checks=True,
+    figure=None,
+):
+    """Push supertype to Clio/FlyTable."""
+    try:
+        # # Sanity checks.
+        # if sanity_checks:
+        #     # First get the required data
+        #     mcns_data = None
+        #     if bodyids is not None and len(bodyids):
+        #         mcns_data = clio.fetch_annotations(bodyids)
+        #     fw_data = None
+        #     if rootids is not None and len(rootids):
+        #         table = ftu.info.get_table()
+        #         fw_data = table[table.root_783.isin(np.array(rootids).astype(str).tolist())]
+
+        #     # 1. Do all neurons have the same hemilineage?
+        #     hl = []
+        #     if mcns_data is not None:
+        #         hl += mcns_data.get("itolee_hl").values.tolist()
+        #     if fw_data is not None:
+        #         hl += fw_data.get("ito_lee_hemilineage").values.tolist()
+
+        #     if len(set(hl)) > 1:
+        #         raise ValueError("Not all neurons have the same hemilineage:", set(hl))
+
+        #     # 2. Are all the types in
+
+        # Make sure supertype is a string
+        super_type = str(super_type)
+
+        if bodyids is not None and len(bodyids):
+            clio.set_fields(bodyids, supertype=super_type)
+
+        if rootids is not None and len(rootids):
+            ftu.info.update_fields(
+                rootids, supertype=super_type, id_col="root_783", dry_run=False
+            )
+
+        if bodyids is not None and rootids is not None:
+            msg = f"Set super type to '{super_type}' for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
+        elif bodyids is not None:
+            msg = (
+                f"Set super type to '{super_type}' for {len(bodyids)} male CNS neurons"
+            )
+        elif rootids is not None:
+            msg = f"Set super type to '{super_type}' for {len(rootids)} FlyWire neurons"
+
+        print(f"{msg}:")
+        if bodyids is not None and len(bodyids):
+            print("  ", bodyids)
+        if rootids is not None and len(rootids):
+            print("  ", rootids)
+
+        if figure:
+            # Show the message
+            figure.show_message(msg, color="lightgreen", duration=2)
+    except BaseException as e:
+        if figure:
+            figure.show_message(
+                "Error pushing super type (see console)", color="red", duration=2
             )
         traceback.print_exc()
         raise
