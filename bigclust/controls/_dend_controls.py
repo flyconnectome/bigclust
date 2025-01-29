@@ -216,6 +216,12 @@ class DendrogramControls(QtWidgets.QWidget):
         self.dclick_deselect.stateChanged.connect(self.set_dclick_deselect)
         self.tab1_layout.addWidget(self.dclick_deselect)
 
+        self.empty_deselect = QtWidgets.QCheckBox("Deselect on empty selection")
+        self.empty_deselect.setToolTip("You can always deselect using ESC")
+        self.empty_deselect.setChecked(self.figure.deselect_on_empty)
+        self.empty_deselect.stateChanged.connect(self.set_empty_deselect)
+        self.tab1_layout.addWidget(self.empty_deselect)
+
         # This would make it so the legend does not stretch when
         # we resize the window vertically
         self.tab1_layout.addStretch(1)
@@ -585,6 +591,10 @@ class DendrogramControls(QtWidgets.QWidget):
     def set_dclick_deselect(self):
         """Set whether to deselect on double-click."""
         self.figure.deselect_on_dclick = self.dclick_deselect.isChecked()
+
+    def set_empty_deselect(self):
+        """Set whether to deselect on double-click."""
+        self.figure.deselect_on_empty = self.empty_deselect.isChecked()
 
     def set_label_counts(self):
         """Set whether to add counts to the labels."""

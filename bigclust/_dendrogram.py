@@ -340,6 +340,9 @@ class Dendrogram(Figure):
         )
         selected = indices[selected]
 
+        if not len(selected) and not self.deselect_on_empty:
+            return
+
         if additive and self.selected is not None:
             selected = np.unique(np.concatenate((self.selected, selected)))
 
@@ -507,6 +510,7 @@ class Dendrogram(Figure):
 
     @property
     def deselect_on_dclick(self):
+        """Whether to deselect all leafs on double-click."""
         return getattr(self, "_deselect_on_dclick", False)
 
     @deselect_on_dclick.setter
@@ -520,6 +524,16 @@ class Dendrogram(Figure):
 
         self._deselect_on_dclick = x
 
+    @property
+    def deselect_on_empty(self):
+        """Whether to deselect all leafs when selection is empty."""
+        return getattr(self, "_deselect_on_empty", False)
+
+    @deselect_on_empty.setter
+    def deselect_on_empty(self, x):
+        assert isinstance(x, bool), "deselect_on_empty must be a boolean."
+
+        self._deselect_on_empty = x
     def set_xscale(self, x):
         self._dendrogram_group.local.scale_x = x
 
