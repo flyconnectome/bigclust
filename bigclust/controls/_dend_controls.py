@@ -61,16 +61,20 @@ class DendrogramControls(QtWidgets.QWidget):
         self.tab1 = QtWidgets.QWidget()
         self.tab2 = QtWidgets.QWidget()
         self.tab3 = QtWidgets.QWidget()
+        self.tab4 = QtWidgets.QWidget()
         self.tab1_layout = QtWidgets.QVBoxLayout()
         self.tab2_layout = QtWidgets.QVBoxLayout()
         self.tab3_layout = QtWidgets.QVBoxLayout()
+        self.tab4_layout = QtWidgets.QVBoxLayout()
         self.tab1.setLayout(self.tab1_layout)
         self.tab2.setLayout(self.tab2_layout)
         self.tab3.setLayout(self.tab3_layout)
+        self.tab4.setLayout(self.tab4_layout)
 
         self.tabs.addTab(self.tab1, "General")
         self.tabs.addTab(self.tab2, "Annotation")
         self.tabs.addTab(self.tab3, "Neuroglancer")
+        self.tabs.addTab(self.tab4, "Settings")
 
         # Deactivate tabs
         if not os.environ.get("BC_ANNOTATION", "0") == "1":
@@ -82,6 +86,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.build_control_gui()
         self.build_annotation_gui()
         self.build_neuroglancer_gui()
+        self.build_settings_gui()
 
         # Holds the futures for requested data
         self.futures = {}
@@ -257,6 +262,44 @@ class DendrogramControls(QtWidgets.QWidget):
         # This makes it so the legend does not stretch
         self.tab3_layout.addStretch(1)
 
+    def build_settings_gui(self):
+        # Add dropdown to determine render mode
+        self.render_mode_label = QtWidgets.QLabel("Render trigger:")
+        self.tab4_layout.addWidget(self.render_mode_label)
+
+        self.render_mode_dropdown = QtWidgets.QComboBox()
+        self.render_mode_dropdown.setToolTip(
+            "Set trigger for re-rendering the scene. See documentation for details."
+        )
+        self.render_mode_dropdown.addItems(["Continuous", "Reactive", "Active Window"])
+        self.render_mode_dropdown.setItemData(
+            0, "Continuously render the scene.", QtCore.Qt.ToolTipRole
+        )
+        self.render_mode_dropdown.setItemData(
+            1,
+            "Render only when the scene changes.",
+            QtCore.Qt.ToolTipRole,
+        )
+        self.render_mode_dropdown.setItemData(
+            2, "Render only when the window is active.", QtCore.Qt.ToolTipRole
+        )
+        render_trigger_vals = ["continuous", "reactive", "active_window"]
+        self.render_mode_dropdown.currentIndexChanged.connect(
+            lambda x: setattr(
+                self.figure,
+                "render_trigger",
+                render_trigger_vals[self.render_mode_dropdown.currentIndex()],
+            )
+        )
+        # Set default item to whatever the currently set render trigger is
+        self.render_mode_dropdown.setCurrentIndex(
+            render_trigger_vals.index(self.figure.render_trigger)
+        )
+        self.tab4_layout.addWidget(self.render_mode_dropdown)
+
+        # This makes it so the legend does not stretch
+        self.tab4_layout.addStretch(1)
+
     def build_annotation_gui(self):
         # Add buttons to push annotations
         self.push_ann_button = QtWidgets.QPushButton("Push annotations")
@@ -311,7 +354,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.sel_dimorphism_action_menu = QtWidgets.QMenu(self)
         self.sel_dimorphism_action.setMenu(self.sel_dimorphism_action_menu)
 
-        # Set actions for the clipboard dropdown
+        # Set actions for the dropdown
         self.sel_dimorphism_action_menu.addAction("Sex-specific")
         self.sel_dimorphism_action_menu.actions()[-1].triggered.connect(
             lambda x: self.selected_set_dimorphism("sex-specific")

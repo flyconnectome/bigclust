@@ -12,7 +12,7 @@ from scipy.cluster.hierarchy import dendrogram as _dendrogram
 
 from .utils import adjust_linkage_colors
 from ._selection import SelectionGizmo
-from ._figure import Figure
+from ._figure import Figure, update_figure
 from ._visuals import lines2gfx, points2gfx, text2gfx
 from .controls import DendrogramControls
 
@@ -230,6 +230,8 @@ class Dendrogram(Figure):
         def move_camera(x, y):
             self.camera.world.x += x
             self.camera.world.y += y
+            self._render_stale = True
+            self.canvas.request_draw()
 
         # self.key_events["ArrowLeft"] = lambda: self.set_xscale(
         #     self._dendrogram_group.local.matrix[0, 0] * 0.9
@@ -318,6 +320,7 @@ class Dendrogram(Figure):
         """Number of original observations in the dendrogram."""
         return self._linkage.shape[0] + 1
 
+    @update_figure
     def select_leafs(self, bounds, additive=False):
         """Select all selectable objects in the region."""
         # Get the positions and original indices of the leaf nodes
@@ -348,6 +351,7 @@ class Dendrogram(Figure):
 
         self.selected = selected
 
+    @update_figure
     def deselect_all(self, *args):
         """Deselect all selected leafs."""
         self.selected = None
@@ -358,6 +362,7 @@ class Dendrogram(Figure):
         return self._labels
 
     @labels.setter
+    @update_figure
     def labels(self, x):
         """Set the labels of leafs in the dendrogram."""
         if x is None:
@@ -407,6 +412,7 @@ class Dendrogram(Figure):
         return self._selected
 
     @selected.setter
+    @update_figure
     def selected(self, x):
         """Select given leafs in the dendrogram."""
         if isinstance(x, type(None)):
@@ -484,6 +490,7 @@ class Dendrogram(Figure):
         return self._font_size
 
     @font_size.setter
+    @update_figure
     def font_size(self, size):
         self._font_size = size
         for t in self._label_visuals:
@@ -503,6 +510,7 @@ class Dendrogram(Figure):
         return self._leaf_size
 
     @leaf_size.setter
+    @update_figure
     def leaf_size(self, size):
         self._leaf_size = size
         for l in self._leaf_visuals:
@@ -534,6 +542,8 @@ class Dendrogram(Figure):
         assert isinstance(x, bool), "deselect_on_empty must be a boolean."
 
         self._deselect_on_empty = x
+
+    @update_figure
     def set_xscale(self, x):
         self._dendrogram_group.local.scale_x = x
 
@@ -543,6 +553,7 @@ class Dendrogram(Figure):
 
         self._text_group.traverse(lambda t: _set_xscale(t, x), skip_invisible=False)
 
+    @update_figure
     def set_yscale(self, y):
         self._dendrogram_group.local.scale_y = y
 
@@ -798,6 +809,7 @@ class Dendrogram(Figure):
         self._dendrogram_group.add(self._dendrogram_visuals)
         self._dendrogram_group.add(*self._leaf_visuals)
 
+    @update_figure
     def show_labels(self, which=None):
         """Show labels for the leafs.
 
@@ -864,6 +876,7 @@ class Dendrogram(Figure):
 
             self._label_visuals[original_ix].visible = True
 
+    @update_figure
     def hide_labels(self, which=None):
         """Hide labels for the leafs.
 
@@ -894,10 +907,12 @@ class Dendrogram(Figure):
 
             self._label_visuals[original_ix].visible = False
 
+    @update_figure
     def toggle_labels(self):
         """Toggle the visibility of labels."""
         self._label_group.visible = not self._label_group.visible
 
+    @update_figure
     def show_hinge_labels(self, which=None):
         """Show labels for hinges.
 
@@ -942,6 +957,8 @@ class Dendrogram(Figure):
                 t._absolute_position_y = pos[1]
 
             self._hinge_label_visuals[ix].visible = True
+
+    @update_figure
     def hide_hinge_labels(self, which=None):
         """Hide labels for hinges.
 
@@ -996,6 +1013,7 @@ class Dendrogram(Figure):
             else:
                 self.show_controls()
 
+    @update_figure
     def find_label(
         self, label, regex=False, highlight=True, go_to_first=True, verbose=True
     ):
@@ -1028,6 +1046,7 @@ class Dendrogram(Figure):
 
         return ls
 
+    @update_figure
     def highlight_leafs(self, leafs, color="y"):
         """Highlight leafs in the dendrogram.
 
@@ -1178,6 +1197,7 @@ class Dendrogram(Figure):
 
         self.set_viewer_colors(colors)
 
+    @update_figure
     def set_leaf_label(self, indices, label):
         """Change the label of given leaf(s) in the dendrogram.
 
@@ -1201,6 +1221,7 @@ class Dendrogram(Figure):
                 self._label_visuals[ix_org].geometry.set_text(lab)
                 self._label_visuals[ix_org].geometry._text = lab
 
+    @update_figure
     def update_leaf_labels(self):
         """Update the labels of the leafs in the dendrogram."""
         if self._labels is None:
@@ -1296,6 +1317,8 @@ class LabelSearch:
         ) * self.dendrogram.x_spacing
         self.dendrogram.camera.local.y = 0
 
+        self.dendrogram._render_stale = True
+
     def prev(self):
         """Go to the previous label."""
         if self._ix is None:
@@ -1312,3 +1335,5 @@ class LabelSearch:
             self.indices[self._ix] + 0.5
         ) * self.dendrogram.x_spacing
         self.dendrogram.camera.local.y = 0
+
+        self.dendrogram._render_stale = True

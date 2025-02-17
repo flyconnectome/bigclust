@@ -6,10 +6,46 @@ import numpy as np
 import pylinalg as la
 
 from abc import abstractmethod
+from functools import wraps
 from wgpu.gui.auto import WgpuCanvas
 from wgpu.gui.offscreen import WgpuCanvas as WgpuCanvasOffscreen
 
 from . import utils, _visuals
+
+
+def update_figure(func):
+    """Decorator to update figure."""
+
+    @wraps(func)
+    def inner(*args, **kwargs):
+        val = func(*args, **kwargs)
+        figure = args[0]
+
+        # Any time we update the viewer, we should set it to stale
+        figure._render_stale = True
+        figure.canvas.request_draw()
+
+        return val
+
+    return inner
+
+
+class StateWgpuCanvas(WgpuCanvas):
+    """WgpuCanvas that emits signals to its parent figure when its moved/resized."""
+    def __init__(self, figure, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._figure = figure
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if hasattr(self._figure, "_on_canvas_state_change"):
+            self._figure._on_canvas_state_changed(event="move")
+
+    def resizeEvent(self, event):
+        self._save_state()
+        super().resizeEvent(event)
+        if hasattr(self._figure, "_on_canvas_state_change"):
+            self._figure._on_canvas_state_changed(event="resize")
 
 
 class BaseFigure:
@@ -119,6 +155,7 @@ class BaseFigure:
         return self.canvas.get_logical_size()
 
     @size.setter
+    @update_figure
     def size(self, size):
         """Set size of the canvas."""
         assert len(size) == 2
@@ -144,6 +181,7 @@ class BaseFigure:
         """Check if Viewer is using offscreen canvas."""
         return isinstance(self.canvas, WgpuCanvasOffscreen)
 
+    @update_figure
     def add_animation(self, x):
         """Add animation function to the Viewer.
 
@@ -158,6 +196,7 @@ class BaseFigure:
 
         self._animations.append(x)
 
+    @update_figure
     def remove_animation(self, x):
         """Remove animation function from the Viewer.
 
@@ -175,6 +214,7 @@ class BaseFigure:
         else:
             raise TypeError(f"Expected callable or index (int), got {type(x)}")
 
+    @update_figure
     def show(self, use_sidecar=False, toolbar=False):
         """Show viewer.
 
@@ -223,6 +263,7 @@ class BaseFigure:
         if not self.canvas.is_closed():
             self.canvas.close()
 
+    @update_figure
     def set_bgcolor(self, c):
         """Set background color.
 
@@ -296,6 +337,17 @@ class Figure(BaseFigure):
     ):
         super().__init__(offscreen=offscreen, max_fps=max_fps, size=size, **kwargs)
 
+        # Setup the scene
+        self._setup_scene()
+
+        # Set the render trigger
+        self._render_trigger = "continuous"
+
+        # This starts the animation loop
+        if show and not self._is_jupyter:
+            self.show()
+
+    def _setup_scene(self):
         # Set up a default scene
         self.scene = gfx.Scene()
         # self.scene.add(gfx.AmbientLight(intensity=1))
@@ -315,12 +367,20 @@ class Figure(BaseFigure):
             self.camera, register_events=self.renderer
         )
 
-        # This starts the animation loop
-        if show and not self._is_jupyter:
-            self.show()
-
     def _animate(self):
-        """Animate the scene."""
+        """Run the render loop."""
+        rm = self.render_trigger
+
+        if rm == "active_window":
+            # Note to self: we need to explore how to do this with different backends / Window managers
+            if hasattr(self.canvas, "isActiveWindow"):
+                if not self.canvas.isActiveWindow():
+                    return
+        elif rm == "reactive":
+            # If the scene is not stale, we can skip rendering
+            if not getattr(self, "_render_stale", False):
+                return
+
         self._run_user_animations()
 
         # Now render the scene
@@ -335,7 +395,56 @@ class Figure(BaseFigure):
             self.renderer.render(self.scene, self.camera, flush=False)
             self.renderer.render(self.overlay_scene, self.overlay_camera)
 
+        # Set stale to False
+        self._render_stale = False
+
         self.canvas.request_draw()
+
+    @property
+    def render_trigger(self):
+        """Determines when the scene is (re)rendered.
+
+        By default, we leave it to the renderer to decide when to render the scene.
+        You can adjust that behaviour by setting render mode to:
+         - "continuous" (default): leave it to the renderer to decide when to render the scene
+         - "active_window": rendering is only done when the window is active
+         - "reactive": rendering is only triggered when the scene changes
+
+        """
+        return self._render_trigger
+
+    @render_trigger.setter
+    def render_trigger(self, mode):
+        valid = ("continuous", "active_window", "reactive")
+        if mode not in valid:
+            raise ValueError(f"Unknown render mode: {mode}. Must be one of {valid}.")
+
+        # No need to do anything if the value is the same
+        if mode == getattr(self, "_render_trigger", None):
+            return
+
+        # Add/remove event handlers as necessary
+        if mode == "reactive":
+            self._set_stale_func = lambda event: setattr(self, "_render_stale", True)
+            self.renderer.add_event_handler(
+                self._set_stale_func,
+                "pointer_down",
+                "pointer_move",
+                "pointer_up",
+                "wheel",
+                # "before_render",
+            )
+        elif self._render_trigger == "reactive":
+            self.renderer.remove_event_handler(
+                self._set_stale_func,
+                "pointer_down",
+                "pointer_move",
+                "pointer_up",
+                "wheel",
+                # "before_render",
+            )
+
+        self._render_trigger = mode
 
     @property
     def x_scale(self):
@@ -343,6 +452,7 @@ class Figure(BaseFigure):
         return self.scene.local.matrix[0, 0]
 
     @x_scale.setter
+    @update_figure
     def x_scale(self, x):
         assert x > 0
         mat = np.copy(self.scene.local.matrix)
@@ -355,12 +465,14 @@ class Figure(BaseFigure):
         return self.scene.local.matrix[1, 1]
 
     @y_scale.setter
+    @update_figure
     def y_scale(self, y):
         assert y > 0
         mat = np.copy(self.scene.local.matrix)
         mat[1, 1] = y
         self.scene.local.matrix = mat
 
+    @update_figure
     def center_camera(self):
         """Center camera on visuals."""
         if len(self.scene.children):
@@ -368,6 +480,7 @@ class Figure(BaseFigure):
                 self.scene, scale=1, view_dir=(0.0, 0.0, 1.0), up=(0.0, -1.0, 0.0)
             )
 
+    @update_figure
     def clear(self):
         """Clear canvas of objects (expects lights and background)."""
         # Remove everything but the lights and backgrounds
@@ -457,6 +570,7 @@ class Figure(BaseFigure):
 
         return pos_world
 
+    @update_figure
     def show_message(
         self, message, position="top-right", font_size=20, color='w', duration=None
     ):
