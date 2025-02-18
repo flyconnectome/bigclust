@@ -177,7 +177,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self.label_layout.addWidget(self.dend_labels)
         self.label_combo_box = QtWidgets.QComboBox()
         self.label_combo_box.addItem("Default")
-        for col in self.figure._table.columns:
+        for col in sorted(self.figure._table.columns):
             self.label_combo_box.addItem(col)
         self.label_layout.addWidget(self.label_combo_box)
         self.label_combo_box.currentIndexChanged.connect(self.set_leaf_labels)
