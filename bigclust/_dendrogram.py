@@ -375,6 +375,36 @@ class Dendrogram(Figure):
         self.update_leaf_labels()  # updates the visuals
 
     @property
+    def show_label_lines(self):
+        """Whether or to show label lines."""
+        return getattr(self, "_show_label_lines", False)
+
+    @show_label_lines.setter
+    @update_figure
+    def show_label_lines(self, x):
+        assert isinstance(x, bool), "`show_label_lines` must be a boolean."
+
+        if x == self.show_label_lines:
+            return
+
+        if x:
+            if not getattr(self, "_label_line_group", None):
+                self.make_label_lines()
+            self._label_line_group.visible = True
+
+            # Set offset to move labels below label lines
+            pos = self._label_line_group.children[0].geometry.positions.data
+            self._label_group.local.y = np.nanmin(pos[:, 1]) - 1
+
+        elif not x and getattr(self, "_label_line_group", None):
+            self._label_line_group.visible = False
+
+            # Reset the offset for labels
+            self._label_group.local.y = 0
+
+        self._show_label_lines = x
+
+    @property
     def labels_ordered(self):
         """Return the labels of leafs in the dendrogram in the order of the dendrogram."""
         return self._labels_ordered
@@ -808,6 +838,64 @@ class Dendrogram(Figure):
         self._dendrogram_group.add(self._axes_visuals)
         self._dendrogram_group.add(self._dendrogram_visuals)
         self._dendrogram_group.add(*self._leaf_visuals)
+
+    def make_label_lines(self):
+        """Generate the lines for the label lines."""
+        # Create a group and add to scene
+        if not getattr(self, "_label_line_group", None):
+            self._label_line_group = gfx.Group()
+            self._label_line_group.visible = self.show_label_lines
+            self.scene.add(self._label_line_group)
+
+        # Clear the group (we might call this function to update the lines)
+        self._label_line_group.clear()
+
+        # Generate a dictionary mapping a unique label to the indices
+        labels = {
+            l: np.where(self._labels_ordered == l)[0]
+            for l in np.unique(self._labels_ordered)
+        }
+
+        # For the y-positions we will try to tetris the labels into non-overlapping lines
+        # Start with the shortest lines and assign y positions
+        lines = []
+        pos_matrix = np.zeros((len(labels), len(self)), dtype=bool)
+        for l in sorted(labels, key=lambda x: labels[x][-1] - labels[x][0]):
+            min_x, max_x = labels[l][0], labels[l][-1]
+            for y in range(len(labels)):
+                if ~np.any(pos_matrix[y, min_x : max_x + 1]):
+                    pos_matrix[y, min_x : max_x + 1] = True
+                    break
+
+            # Now generate the line visuals
+            # First: the horizontal line (only required if N > 1)
+            if min_x != max_x:
+                lines += [
+                    [min_x * self.x_spacing, -y, 0],
+                    [max_x * self.x_spacing, -y, 0],
+                    [None, None, None],
+                ]
+
+            # Now the vertical little knobs to indicate position of labels
+            for ix in labels[l]:
+                lines += [
+                    [ix * self.x_spacing, -y, 0],
+                    [ix * self.x_spacing, -y + 0.7, 0],
+                    [None, None, None],
+                ]
+
+        # Convert to (N, 3) numpy array
+        lines = np.array(lines).astype(np.float32)
+
+        # Last but not least:
+        # (1) Add an offset so that the lines slightly below zero
+        lines[:, 1] -= 2
+        # (2) Adjust height
+        lines[:, 1] *= 1.5
+        # (3) Shift to the right by 0.5 to center them
+        lines[:, 0] += 0.5 * self.x_spacing
+
+        self._label_line_group.add(lines2gfx(lines, color="lightgrey"))
 
     @update_figure
     def show_labels(self, which=None):

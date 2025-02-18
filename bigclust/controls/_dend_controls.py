@@ -183,11 +183,19 @@ class DendrogramControls(QtWidgets.QWidget):
         self.label_combo_box.currentIndexChanged.connect(self.set_leaf_labels)
         self._current_leaf_labels = self.label_combo_box.currentText()
 
+        # Checkbox for whether to show label counts
         self.label_count_check = QtWidgets.QCheckBox("Add label counts")
-        self.label_count_check.setToolTip("Whether to add counts to the labels")
+        self.label_count_check.setToolTip("Whether to add counts to the labels.")
         self.label_count_check.setChecked(False)
         self.label_count_check.stateChanged.connect(self.set_label_counts)
         self.tab1_layout.addWidget(self.label_count_check)
+
+        # Checkbox for whether to show label lines
+        self.label_lines_check = QtWidgets.QCheckBox("Show label lines")
+        self.label_lines_check.setToolTip("Whether to plot lines grouping labels.")
+        self.label_lines_check.setChecked(False)
+        self.label_lines_check.stateChanged.connect(self.set_label_lines)
+        self.tab1_layout.addWidget(self.label_lines_check)
 
         # Add horizontal divider
         self.add_split(self.tab1_layout)
@@ -686,6 +694,10 @@ class DendrogramControls(QtWidgets.QWidget):
         """Set whether to add counts to the labels."""
         self.set_leaf_labels()  # Update the labels
 
+    def set_label_lines(self):
+        """Set whether to show label lines."""
+        self.figure.show_label_lines = self.label_lines_check.isChecked()
+
     def find_next(self):
         """Find next occurrence."""
         text = self.searchbar.text()
@@ -786,6 +798,11 @@ class DendrogramControls(QtWidgets.QWidget):
         self.searchbar_completer.setModel(
             self._label_models[(label, self.label_count_check.isChecked())]
         )
+
+        # Update label lines
+        if getattr(self.figure, "_label_line_group"):
+            # Re-trigger making label lines
+            self.figure.make_label_lines()
 
     def switch_labels(self):
         """Switch between current and last labels."""
