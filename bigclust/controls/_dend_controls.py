@@ -184,7 +184,7 @@ class DendrogramControls(QtWidgets.QWidget):
         self._current_leaf_labels = self.label_combo_box.currentText()
 
         # Checkbox for whether to show label counts
-        self.label_count_check = QtWidgets.QCheckBox("Add label counts")
+        self.label_count_check = QtWidgets.QCheckBox("Show label counts")
         self.label_count_check.setToolTip("Whether to add counts to the labels.")
         self.label_count_check.setChecked(False)
         self.label_count_check.stateChanged.connect(self.set_label_counts)
@@ -266,6 +266,13 @@ class DendrogramControls(QtWidgets.QWidget):
         self.ngl_copy_button.setToolTip("Copy the current scene to the clipboard")
         self.ngl_copy_button.clicked.connect(self.ngl_copy)
         self.tab3_layout.addWidget(self.ngl_copy_button)
+
+        # Checkbox for whether to show label lines
+        self.cache_neurons = QtWidgets.QCheckBox("Cache neurons")
+        self.cache_neurons.setToolTip("Whether cache neuron meshes.")
+        self.cache_neurons.setChecked(False)
+        self.cache_neurons.stateChanged.connect(self.set_ngl_cache)
+        self.tab3_layout.addWidget(self.cache_neurons)
 
         # This makes it so the legend does not stretch
         self.tab3_layout.addStretch(1)
@@ -681,6 +688,14 @@ class DendrogramControls(QtWidgets.QWidget):
     def set_add_group(self):
         """Set whether to add neurons as group when selected."""
         self.figure._add_as_group = self.add_group_check.isChecked()
+
+    def set_ngl_cache(self):
+        """Set whether the ngl viewer should cache neurons."""
+        if hasattr(self.figure, "_ngl_viewer"):
+            self.figure._ngl_viewer.use_cache = self.cache_neurons.isChecked()
+
+            if not self.cache_neurons.isChecked():
+                self.figure._ngl_viewer.clear_cache()
 
     def set_dclick_deselect(self):
         """Set whether to deselect on double-click."""

@@ -33,10 +33,14 @@ class NglViewer:
         neuropil_source=None,
         debug=False,
         max_threads=20,
-        title="Octarine Viewer"
+        title="Octarine Viewer",
     ):
         self.debug = debug
-        self.data = data.rename({"segment_id": "id"}, axis=1).astype({"id": int}).set_index('id')
+        self.data = (
+            data.rename({"segment_id": "id"}, axis=1)
+            .astype({"id": int})
+            .set_index("id")
+        )
         self.set_default_colors()
 
         # Parse cloudvolumes
@@ -51,19 +55,21 @@ class NglViewer:
         self._neuropil_source = neuropil_source
         if neuropil_mesh:
             self.viewer.add_mesh(
-                neuropil_mesh, color=(0.8, 0.8, 0.8, 0.05), name="neuropil"
+                neuropil_mesh, color=(0.8, 0.8, 0.8, 0.01), name="neuropil"
             )
             self._centered = True
 
         # Holds the futures for requested data
         self.futures = {}
         self.n_failed = 0  # track the number of failed requests
-        self._futures_check_rate = 20 # check every 20 frames
-        self._futures_check_counter = 0  # counter for checking futures
         self.pool = ThreadPoolExecutor(max_threads)
 
         # Tracks which neurons we've already loaded
         self._segments = {}
+
+        # Optional cache
+        self.use_cache = False
+        self.cache = {}
 
         self.register()
 
@@ -141,7 +147,9 @@ class NglViewer:
 
         to_show = self.data.loc[ids]
         self.report(
-            f"Showing {len(to_show)} neurons: ", to_show.index.values.tolist(), flush=True
+            f"Showing {len(to_show)} neurons: ",
+            to_show.index.values.tolist(),
+            flush=True,
         )
 
         # Remove those segments we don't want
@@ -180,13 +188,17 @@ class NglViewer:
             else:
                 name = f"group_{to_show.index.values[0]}"
 
-            self.futures[(row.name, name)] = self.pool.submit(
-                self._load_mesh,
-                row.name,
-                self.volumes[row.source],
-                lod=lod,
-                **kwargs,
-            )
+            if row.name in self.cache:
+                self.viewer.add(self.cache[row.name], name=str(name), center=False)
+                self._segments[row.name] = str(name)
+            else:
+                self.futures[(row.name, name)] = self.pool.submit(
+                    self._load_mesh,
+                    row.name,
+                    self.volumes[row.source],
+                    lod=lod,
+                    **kwargs,
+                )
             # self._segments[row.name] = name
 
     def clear(self):
@@ -198,6 +210,10 @@ class NglViewer:
             future.cancel()
 
         self.futures.clear()
+
+    def clear_cache(self):
+        """Clear the cache."""
+        self.cache.clear()
 
     def neuroglancer_scene(self):
         """Generate neuroglancer scene for the current state."""
@@ -330,6 +346,10 @@ class NglViewer:
             if not self._centered:
                 self.viewer.center_camera()
                 self._centered = True
+
+            # Populate cache if necessary
+            if self.use_cache:
+                self.cache[id] = data
 
         # Show progress message
         if has_futures and len(self.futures) > 0:
