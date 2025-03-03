@@ -209,6 +209,9 @@ class NglViewer:
                         color = self.viewer._next_color()
                 visual.material.color = gfx.Color(color)
 
+                # We also need to make sure that the visual is visible
+                visual.visible = True
+
                 self.viewer.add(visual, name=str(name), center=False)
                 self._segments[row.name] = visual
             else:
