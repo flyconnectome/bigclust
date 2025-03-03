@@ -210,7 +210,7 @@ class NglViewer:
                 visual.material.color = gfx.Color(color)
 
                 self.viewer.add(visual, name=str(name), center=False)
-                self._segments[row.name] = str(name)
+                self._segments[row.name] = visual
             else:
                 self.report("  Loading visual for", row.name, flush=True)
                 self.futures[(row.name, name)] = self.pool.submit(
@@ -220,23 +220,23 @@ class NglViewer:
                     lod=lod,
                     **kwargs,
                 )
-            # self._segments[row.name] = name
 
     def remove_objects(self, objects):
         """Remove objects from the viewer."""
+        self.report(f"  Removing {len(objects)} neurons: ", objects, flush=True)
         for x in objects:
             if x not in self._segments:
                 raise ValueError(f"Segment {x} not found in viewer.")
             self.viewer.remove_objects([self._segments[x]])
             self._segments.pop(x, None)
 
-        self.report(f"  Removing {len(objects)} neurons: ", objects, flush=True)
-
     def clear(self):
         """Clear the viewer of selected segments."""
-        self.viewer.remove_objects([str(x) for x in self._segments.values()])
+        self.report("Clearing viewer", flush=True)
+        self.viewer.remove_objects(list(self._segments.values()))
         self._segments.clear()
 
+        self.report(f"  Canceling {len(self.futures)} futures", flush=True)
         for future in self.futures.values():
             future.cancel()
 
@@ -253,11 +253,11 @@ class NglViewer:
         id2source = self.data.source.to_dict()
 
         # Add already loaded IDs
-        for id, name in self._segments.items():
+        for (id, visual) in self._segments.items():
             ids_per_layer[id2source[id]].append(id)
 
         # Add IDs that are currently being loaded
-        for (id, name), future in self.futures.items():
+        for (id, visual), future in self.futures.items():
             ids_per_layer[id2source[id]].append(id)
 
         # Generate the scene
@@ -339,6 +339,7 @@ class NglViewer:
             m = vol.mesh.get(x, lod=lod)[x]
         except BaseException as e:
             import traceback
+
             print(f"Error loading mesh for {x}:")
             traceback.print_exc()
             return e
@@ -361,17 +362,17 @@ class NglViewer:
         for (id, name), future in self.futures.items():
             if not future.done():
                 continue
-            data = future.result()
+            visual = future.result()
 
             # If there is no mesh, skip
-            if isinstance(data, BaseException):
+            if isinstance(visual, BaseException):
                 self.n_failed += 1
-                self.report(f"Failed to load {id}: {data}", flush=True)
+                self.report(f"Failed to load {id}: {visual}", flush=True)
                 continue
 
             self.report(f"Loaded {id}", flush=True)
-            self.viewer.add(data, name=str(name), center=False)
-            self._segments[id] = str(name)
+            self.viewer.add(visual, name=str(name), center=False)
+            self._segments[id] = visual
 
             # Center on the first neuron
             if not self._centered:
@@ -381,7 +382,7 @@ class NglViewer:
             # Populate cache if necessary
             if self.use_cache:
                 self.report(f"Caching visual for {id}", flush=True)
-                self.cache[id] = data
+                self.cache[id] = visual
 
         # Show progress message
         if has_futures and len(self.futures) > 0:
