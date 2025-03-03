@@ -268,11 +268,18 @@ class DendrogramControls(QtWidgets.QWidget):
         self.tab3_layout.addWidget(self.ngl_copy_button)
 
         # Checkbox for whether to show label lines
-        self.cache_neurons = QtWidgets.QCheckBox("Cache neurons")
-        self.cache_neurons.setToolTip("Whether cache neuron meshes.")
-        self.cache_neurons.setChecked(False)
-        self.cache_neurons.stateChanged.connect(self.set_ngl_cache)
-        self.tab3_layout.addWidget(self.cache_neurons)
+        self.ngl_cache_neurons = QtWidgets.QCheckBox("Cache neurons")
+        self.ngl_cache_neurons.setToolTip("Whether cache neuron meshes.")
+        self.ngl_cache_neurons.setChecked(False)
+        self.ngl_cache_neurons.stateChanged.connect(self.set_ngl_cache)
+        self.tab3_layout.addWidget(self.ngl_cache_neurons)
+
+        # Checkbox for debug mode
+        self.ngl_debug_mode = QtWidgets.QCheckBox("Debug mode")
+        self.ngl_debug_mode.setToolTip("Whether to show debug information for the neuroglancer view")
+        self.ngl_debug_mode.setChecked(False)
+        self.ngl_debug_mode.stateChanged.connect(self.set_ngl_debug)
+        self.tab3_layout.addWidget(self.ngl_debug_mode)
 
         # This makes it so the legend does not stretch
         self.tab3_layout.addStretch(1)
@@ -692,10 +699,15 @@ class DendrogramControls(QtWidgets.QWidget):
     def set_ngl_cache(self):
         """Set whether the ngl viewer should cache neurons."""
         if hasattr(self.figure, "_ngl_viewer"):
-            self.figure._ngl_viewer.use_cache = self.cache_neurons.isChecked()
+            self.figure._ngl_viewer.use_cache = self.ngl_cache_neurons.isChecked()
 
-            if not self.cache_neurons.isChecked():
+            if not self.ngl_cache_neurons.isChecked():
                 self.figure._ngl_viewer.clear_cache()
+
+    def set_ngl_debug(self):
+        """Set debug mode for ngl viewer."""
+        if hasattr(self.figure, "_ngl_viewer"):
+            self.figure._ngl_viewer.debug = self.ngl_debug_mode.isChecked()
 
     def set_dclick_deselect(self):
         """Set whether to deselect on double-click."""
@@ -815,7 +827,7 @@ class DendrogramControls(QtWidgets.QWidget):
         )
 
         # Update label lines
-        if getattr(self.figure, "_label_line_group"):
+        if hasattr(self.figure, "_label_line_group"):
             # Re-trigger making label lines
             self.figure.make_label_lines()
 

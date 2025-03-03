@@ -1,11 +1,12 @@
 import cmap
 import requests
 
-import numpy as np
-import octarine as oc
-import cloudvolume as cv
 import dvid as dv
+import numpy as np
+import pygfx as gfx
+import octarine as oc
 import nglscenes as ngl
+import cloudvolume as cv
 
 import navis
 
@@ -68,7 +69,6 @@ class NglViewer:
         self._segments = {}
 
         # Optional cache
-        self.use_cache = False
         self.cache = {}
 
         self.register()
@@ -78,6 +78,15 @@ class NglViewer:
             self.pool.shutdown(cancel_futures=True, wait=True)
         if hasattr(self, "viewer"):
             self.unregister()
+
+    @property
+    def use_cache(self):
+        return getattr(self, '_use_cache', False)
+
+    @use_cache.setter
+    def use_cache(self, value):
+        self._use_cache = value
+        self.report(f"Cache set to {value}", flush=True)
 
     def set_default_colors(self):
         # Check for color column
@@ -153,19 +162,14 @@ class NglViewer:
         )
 
         # Remove those segments we don't want
-        to_remove = [
-            self._segments[x] for x in self._segments if x not in to_show.index.values
-        ]
-        # to_remove = [str(x) for x in (self._segments - set(to_show.id.values))]
-        self.viewer.remove_objects(to_remove)
-        self.report(f"Removing {len(to_remove)} neurons: ", to_remove, flush=True)
+        self.remove_objects([x for x in self._segments if x not in to_show.index.values])
 
         # Cancel all futures we don't need anymore
         # Note: we need to use list() because we're potentially
         # modifying the dict inside the loop
         for (id, _), future in list(self.futures.items()):
             if id not in to_show.index.values:
-                self.report("Cancelling future for", id, flush=True)
+                self.report("  Cancelling future for", id, flush=True)
 
                 # Cancel future
                 future.cancel()
@@ -177,7 +181,7 @@ class NglViewer:
         to_show = to_show[~to_show.index.isin(self._segments)]
 
         for _, row in to_show.iterrows():
-            self.report("Loading", row.name, flush=True)
+            self.report("  Adding", row.name, flush=True)
 
             # Skip if we're already loading this segment
             if row.name in self.futures:
@@ -189,9 +193,26 @@ class NglViewer:
                 name = f"group_{to_show.index.values[0]}"
 
             if row.name in self.cache:
-                self.viewer.add(self.cache[row.name], name=str(name), center=False)
+                self.report("  Using cached visual for", row.name, flush=True)
+                # Get the cached visual
+                visual =self.cache[row.name]
+
+                # It's possible that the color scheme changed or that
+                # the user changed the color manually. We will need to
+                # reset the color before adding the visual to the
+                # scene.
+                color = kwargs.get("color", None)
+                if color is None:
+                    if int(row.name) in self._colors:
+                        color = self._colors[int(row.name)]
+                    else:
+                        color = self.viewer._next_color()
+                visual.material.color = gfx.Color(color)
+
+                self.viewer.add(visual, name=str(name), center=False)
                 self._segments[row.name] = str(name)
             else:
+                self.report("  Loading visual for", row.name, flush=True)
                 self.futures[(row.name, name)] = self.pool.submit(
                     self._load_mesh,
                     row.name,
@@ -200,6 +221,16 @@ class NglViewer:
                     **kwargs,
                 )
             # self._segments[row.name] = name
+
+    def remove_objects(self, objects):
+        """Remove objects from the viewer."""
+        for x in objects:
+            if x not in self._segments:
+                raise ValueError(f"Segment {x} not found in viewer.")
+            self.viewer.remove_objects([self._segments[x]])
+            self._segments.pop(x, None)
+
+        self.report(f"  Removing {len(objects)} neurons: ", objects, flush=True)
 
     def clear(self):
         """Clear the viewer of selected segments."""
@@ -349,6 +380,7 @@ class NglViewer:
 
             # Populate cache if necessary
             if self.use_cache:
+                self.report(f"Caching visual for {id}", flush=True)
                 self.cache[id] = data
 
         # Show progress message
