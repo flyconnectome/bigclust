@@ -75,32 +75,34 @@ class WindowStateManager:
         """Whether the config file has stored state."""
         return True if self.stored_state else False
 
-    def add_figures(self, *figures):
-        """Add figures to be managed."""
-        for fig in figures:
-            # Register the keyboard shortcut to save the state
-            if isinstance(fig, (Figure, Dendrogram)):
-                fig.key_events[(self.shortcut, self.modifiers)] = self.save_state
-                name = fig.canvas.windowTitle()
-            elif isinstance(fig, NglViewer):
-                fig.viewer._key_events[(self.shortcut, self.modifiers)] = self.save_state
-                name = fig.viewer.canvas.windowTitle()
-            elif isinstance(fig, Viewer):
-                fig._key_events[(self.shortcut, self.modifiers)] = self.save_state
-                name = fig.canvas.windowTitle()
-            elif isinstance(fig, QWidget):
-                name = fig.windowTitle()
-            else:
-                raise TypeError(
-                    f"Expected Figure, Dendrogram, or NglViewer, got {type(fig)}."
-                )
+    def add_figures(self, figure, id=None):
+        """Add figure to be managed."""
+        # Register the keyboard shortcut to save the state
+        if isinstance(figure, (Figure, Dendrogram)):
+            figure.key_events[(self.shortcut, self.modifiers)] = self.save_state
+            name = figure.canvas.windowTitle()
+        elif isinstance(figure, NglViewer):
+            figure.viewer._key_events[(self.shortcut, self.modifiers)] = self.save_state
+            name = figure.viewer.canvas.windowTitle()
+        elif isinstance(figure, Viewer):
+            figure._key_events[(self.shortcut, self.modifiers)] = self.save_state
+            name = figure.canvas.windowTitle()
+        elif isinstance(figure, QWidget):
+            name = figure.windowTitle()
+        else:
+            raise TypeError(
+                f"Expected Figure, Dendrogram, or NglViewer, got {type(figure)}."
+            )
 
-            if name in self.figures:
-                raise ValueError(
-                    f"Figure with name {name} (title) already exists. Titles must be unique!"
-                )
+        if id is None:
+            id = name
 
-            self.figures[name] = fig
+        if id in self.figures:
+            raise ValueError(
+                f"Figure with ID/title '{id}' already exists."
+            )
+
+        self.figures[id] = figure
 
     def save_state(self):
         """Save the state of all figures to the config file."""
