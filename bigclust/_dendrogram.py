@@ -78,9 +78,11 @@ class Dendrogram(Figure):
         super().__init__(size=(1000, 400), **kwargs)
 
         self._linkage = np.asarray(linkage)
-        self._table = table
+        self._table = table.reset_index(drop=True)
         self._default_label_col = labels
-        self._labels = np.array(table[labels].values) if labels is not None else None  # make sure to use  a copy
+        self._labels = (
+            np.array(table[labels].values) if labels is not None else None
+        )  # make sure to use  a copy
         if self._labels is not None:
             # `_label_visuals` is in the same order as `_labels`
             self._label_visuals = [None] * len(self._labels)
@@ -94,9 +96,9 @@ class Dendrogram(Figure):
 
         if hover_info is not None:
             if "{" in hover_info:
-                hover_info = table.apply(hover_info.format_map, axis=1)
+                hover_info = self._table.apply(hover_info.format_map, axis=1).values
             else:
-                hover_info = table[hover_info]
+                hover_info = self._table[hover_info].values
         self._hover_info = np.asarray(hover_info) if hover_info is not None else None
 
         self._leaf_size = self.x_spacing / 10
@@ -118,7 +120,9 @@ class Dendrogram(Figure):
         # This is the inverse of the above, i.e. for each leaf in the dendrogram (left to right),
         # what is its index in the original distance matrix
         self._leafs_order_inv = np.argsort(self._leafs_order)
-        self._labels_ordered = self._labels[self._leafs_order] if self._labels is not None else None
+        self._labels_ordered = (
+            self._labels[self._leafs_order] if self._labels is not None else None
+        )
 
         # This is the order of IDs the dendrogram left to right
         self._ids_ordered = (
@@ -128,17 +132,26 @@ class Dendrogram(Figure):
         if self._clusters is not None:
             adjust_linkage_colors(self._dendrogram, self._clusters, cluster_colors)
 
-        self._hinge_labels = np.asarray(hinge_labels) if hinge_labels is not None else None
+        self._hinge_labels = (
+            np.asarray(hinge_labels) if hinge_labels is not None else None
+        )
         if self._hinge_labels is not None:
-            assert len(self._hinge_labels) == len(self._linkage), "Hinge labels must match the linkage matrix."
+            assert len(self._hinge_labels) == len(self._linkage), (
+                "Hinge labels must match the linkage matrix."
+            )
 
             # Calculate the position of the hinge labels in the dendrogram
             import cocoa as cc
+
             # This is an (N, 2) array of x/y coordinates for our N hinge labels
-            self._hinge_label_pos = cc.cluster_utils.map_linkage_to_dendrogram(self._dendrogram, self._linkage)
+            self._hinge_label_pos = cc.cluster_utils.map_linkage_to_dendrogram(
+                self._dendrogram, self._linkage
+            )
             # The coordinates match the coordinates on the matplotlib figure where the x coordinate is (index + 0.5) * 10
             # Because bigclust is using its own x-spacing, we need to adjust the x coordinates
-            self._hinge_label_pos[:, 0] = self._hinge_label_pos[:, 0] / 10 * self.x_spacing
+            self._hinge_label_pos[:, 0] = (
+                self._hinge_label_pos[:, 0] / 10 * self.x_spacing
+            )
 
             # Prepare the visuals for the hinge labels
             self._hinge_label_visuals = [None] * len(self._hinge_labels)
@@ -173,7 +186,7 @@ class Dendrogram(Figure):
         self._text_group.add(self._hinge_label_group)
 
         # Setup hover info
-        if hover_info is not None:
+        if self._hover_info is not None:
 
             def hover(event):
                 # Note: we could use e.g. shift-hover to show
@@ -200,7 +213,7 @@ class Dendrogram(Figure):
                         "asdfgasdfasdfsdafsfasdfasg"
                     )
                     self._hover_widget.children[1].geometry.set_text(
-                        str(hover_info[self._leafs_order[vis._leaf_ix[closest]]])
+                        str(self._hover_info[self._leafs_order[vis._leaf_ix[closest]]])
                     )
 
                     # Scale the background to fit the text
@@ -1376,7 +1389,7 @@ class LabelSearch:
         else:
             return np.where(
                 [
-                    re.search(str(label), l) is not None
+                    re.search(str(label), str(l)) is not None
                     for l in self.dendrogram._labels_ordered
                 ]
             )[0]
