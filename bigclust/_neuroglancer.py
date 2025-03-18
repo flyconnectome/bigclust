@@ -62,6 +62,8 @@ class NglViewer:
 
         # Holds the futures for requested data
         self.futures = {}
+        self._futures_check_counter = 0
+        self._futures_check_rate = 30
         self.n_failed = 0  # track the number of failed requests
         self.pool = ThreadPoolExecutor(max_threads)
 
@@ -124,7 +126,7 @@ class NglViewer:
         self.viewer.close()
 
     def register(self):
-        self.viewer.add_animation(self.check_futures)
+        self.viewer.add_animation(self.check_futures, run_every=20, req_render=False)
 
     def unregister(self):
         self.viewer.remove_animation(self.check_futures)
