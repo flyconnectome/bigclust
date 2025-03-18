@@ -5,6 +5,7 @@ six
 cmap
 pyperclip
 octarine3d
+pygfx==0.8.0
 PySide6
 scipy
 dvidtools

@@ -101,7 +101,7 @@ class Heatmap(BaseFigure):
         #                 str(t),
         #                 position=((i + 0.5) * self.x_spacing, -0.25, 0),
         #                 font_size=1,
-        #                 anchor="topmiddle",
+        #                 anchor="top-center",
         #             )
         #         )
         #         # Track where this label is supposed to show up (for scaling)
@@ -454,7 +454,7 @@ class Heatmap(BaseFigure):
                         str(t),
                         position=(-1.5, t, 0),
                         font_size=1,
-                        anchor="middleright",
+                        anchor="center-right",
                     )
                 )
                 # Track where this label is supposed to show up (for scaling)

@@ -618,7 +618,7 @@ class Dendrogram(Figure):
             1,
         )  # this means it's centered and slightly in front
         widget.add(
-            text2gfx("Hover info", color=font_color, font_size=1, anchor="center")
+            text2gfx("Hover info", color=font_color, font_size=1, anchor="middle-center")
         )
         widget.children[1].local.position = (
             0,
@@ -676,7 +676,7 @@ class Dendrogram(Figure):
                         str(t),
                         position=(-1.5, t, 0),
                         font_size=1,
-                        anchor="middleright",
+                        anchor="middle-right",
                     )
                 )
                 # Track where this label is supposed to show up (for scaling)
@@ -931,7 +931,7 @@ class Dendrogram(Figure):
                     str(self._labels[original_ix]),
                     position=((ix + 0.5) * self.x_spacing, -0.25, 0),
                     font_size=self.font_size,
-                    anchor="topmiddle",
+                    anchor="top-center",
                     pickable=True,
                 )
 
@@ -1032,7 +1032,7 @@ class Dendrogram(Figure):
                     position=(pos[0], pos[1] * self._dendrogram_group.local.scale_y, 0),
                     font_size=self.font_size * 0.75,
                     color=(1, 1, 1, 1),
-                    anchor="bottommiddle",
+                    anchor="bottom-center",
                     pickable=False,
                 )
 

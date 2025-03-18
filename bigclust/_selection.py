@@ -139,7 +139,7 @@ class SelectionGizmo(WorldObject):
                     gfx.TextGeometry(
                         markdown="",
                         font_size=self.info_font_size,
-                        anchor="bottomright",
+                        anchor="bottom-right",
                     ),
                     gfx.TextMaterial(
                         color=self._edge_color if self._edge_color else self._fill_color
@@ -149,7 +149,7 @@ class SelectionGizmo(WorldObject):
                     gfx.TextGeometry(
                         markdown="",
                         font_size=self.info_font_size,
-                        anchor="topleft",
+                        anchor="top-left",
                     ),
                     gfx.TextMaterial(
                         color=self._edge_color if self._edge_color else self._fill_color
