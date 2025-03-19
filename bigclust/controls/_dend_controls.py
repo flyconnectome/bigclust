@@ -270,7 +270,10 @@ class DendrogramControls(QtWidgets.QWidget):
         # Checkbox for whether to show label lines
         self.ngl_cache_neurons = QtWidgets.QCheckBox("Cache neurons")
         self.ngl_cache_neurons.setToolTip("Whether cache neuron meshes.")
-        self.ngl_cache_neurons.setChecked(False)
+        if hasattr(self.figure, "_ngl_viewer"):
+            self.ngl_cache_neurons.setChecked(self.figure._ngl_viewer.use_cache)
+        else:
+            self.ngl_cache_neurons.setChecked(False)
         self.ngl_cache_neurons.stateChanged.connect(self.set_ngl_cache)
         self.tab3_layout.addWidget(self.ngl_cache_neurons)
 
