@@ -615,9 +615,9 @@ class Figure(BaseFigure):
         if self._message_text not in self.overlay_scene.children:
             self.overlay_scene.add(self._message_text)
 
-        self._message_text.geometry.set_text(message)
-        self._message_text.geometry.font_size = font_size
-        self._message_text.geometry.anchor = position
+        self._message_text.set_text(message)
+        self._message_text.font_size = font_size
+        self._message_text.anchor = position
         if color is not None:
             self._message_text.material.color = cmap.Color(color).rgba
         self._message_text.material.opacity = 1

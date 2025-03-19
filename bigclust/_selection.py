@@ -136,22 +136,18 @@ class SelectionGizmo(WorldObject):
         if self._show_info:
             self._show_info = (
                 gfx.Text(
-                    gfx.TextGeometry(
-                        markdown="",
-                        font_size=self.info_font_size,
-                        anchor="bottom-right",
-                    ),
-                    gfx.TextMaterial(
+                    markdown="",
+                    font_size=self.info_font_size,
+                    anchor="bottom-right",
+                    material=gfx.TextMaterial(
                         color=self._edge_color if self._edge_color else self._fill_color
                     ),
                 ),
                 gfx.Text(
-                    gfx.TextGeometry(
-                        markdown="",
-                        font_size=self.info_font_size,
-                        anchor="top-left",
-                    ),
-                    gfx.TextMaterial(
+                    markdown="",
+                    font_size=self.info_font_size,
+                    anchor="top-left",
+                    material=gfx.TextMaterial(
                         color=self._edge_color if self._edge_color else self._fill_color
                     ),
                 ),
@@ -318,10 +314,10 @@ class SelectionGizmo(WorldObject):
         if not self._show_info:
             return
 
-        self._show_info[0].geometry.set_text(
+        self._show_info[0].set_text(
             f"({self._sel['start'][0]:.2f}, {self._sel['start'][0]:.2f})"
         )
-        self._show_info[1].geometry.set_text(
+        self._show_info[1].set_text(
             f"({self._sel['end'][0]:.2f}, {self._sel['end'][0]:.2f})"
         )
 

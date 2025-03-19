@@ -4,8 +4,8 @@ scipy
 six
 cmap
 pyperclip
-octarine3d
-pygfx==0.8.0
+octarine3d>=0.3.0
+pygfx==0.9.0
 PySide6
 scipy
 dvidtools

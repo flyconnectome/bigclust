@@ -57,11 +57,11 @@ def text2gfx(
         defaults["text"] = text
 
     vis = gfx.Text(
-        gfx.TextGeometry(**defaults),
-        gfx.TextMaterial(color=color, pick_write=pickable),
+        **defaults,
+        material=gfx.TextMaterial(color=color, pick_write=pickable),
     )
     vis.local.position = position
-    vis.geometry._text = text  # track the actual text
+    vis._text = text  # track the actual text
     return vis
 
 

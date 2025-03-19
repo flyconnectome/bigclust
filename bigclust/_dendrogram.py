@@ -209,10 +209,10 @@ class Dendrogram(Figure):
                     # N.B. there is some funny behaviour where repeatedly setting the same
                     # text will cause the bounding box to increase every time. To avoid this
                     # we have to reset the text to anything but an empty string.
-                    self._hover_widget.children[1].geometry.set_text(
+                    self._hover_widget.children[1].set_text(
                         "asdfgasdfasdfsdafsfasdfasg"
                     )
-                    self._hover_widget.children[1].geometry.set_text(
+                    self._hover_widget.children[1].set_text(
                         str(self._hover_info[self._leafs_order[vis._leaf_ix[closest]]])
                     )
 
@@ -538,10 +538,10 @@ class Dendrogram(Figure):
         self._font_size = size
         for t in self._label_visuals:
             if isinstance(t, gfx.Text):
-                t.geometry.font_size = size
-        for t in getattr(self, '_hinge_label_visuals', []):
+                t.font_size = size
+        for t in getattr(self, "_hinge_label_visuals", []):
             if isinstance(t, gfx.Text):
-                t.geometry.font_size = size * 0.75
+                t.font_size = size * 0.75
 
         # The hover widget is basically set up such that the text is size 1
         # So we just scale the whole thing accordingly when the font size changes
@@ -949,11 +949,9 @@ class Dendrogram(Figure):
                 )
 
                 def _highlight(event, text):
-                    self.find_label(text.geometry._text, go_to_first=False)
+                    self.find_label(text._text, go_to_first=False)
 
-                t.add_event_handler(
-                    partial(_highlight, text=t), "double_click"
-                )
+                t.add_event_handler(partial(_highlight, text=t), "double_click")
 
                 # `_label_visuals` is in the same order as `_labels`
                 self._label_visuals[original_ix] = t
@@ -964,12 +962,12 @@ class Dendrogram(Figure):
                 t._absolute_position_y = -0.25
 
                 # Center the text
-                t.geometry.text_align = "center"
+                t.text_align = "center"
 
                 # Rotate labels to avoid overlap
                 if self._rotate_labels:
-                    t.geometry.anchor = "topright"
-                    t.geometry.text_align = "right"
+                    t.anchor = "topright"
+                    t.text_align = "right"
                     t.local.euler_z = (
                         1  # slightly slanted, use `math.pi / 2` for 90 degress
                     )
@@ -1319,8 +1317,8 @@ class Dendrogram(Figure):
         for ix, lab in zip(indices, label):
             ix_org = self._leafs_order[ix]
             if self._label_visuals[ix_org] is not None:
-                self._label_visuals[ix_org].geometry.set_text(lab)
-                self._label_visuals[ix_org].geometry._text = lab
+                self._label_visuals[ix_org].set_text(lab)
+                self._label_visuals[ix_org]._text = lab
 
     @update_figure
     def update_leaf_labels(self):
@@ -1331,8 +1329,8 @@ class Dendrogram(Figure):
         for i, l in enumerate(self._label_visuals):
             if l is None:
                 continue
-            l.geometry.set_text(self._labels[i])
-            l.geometry._text = self._labels[i]
+            l.set_text(self._labels[i])
+            l._text = self._labels[i]
 
 
 class LabelSearch:
