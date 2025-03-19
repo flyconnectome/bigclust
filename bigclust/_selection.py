@@ -62,6 +62,7 @@ class SelectionGizmo(WorldObject):
         leave=False,
         callback_after=None,
         callback_during=None,
+        name="SelectionGizmo",
     ):
         assert modifier in ("Shift", "Ctrl", "Alt", None)
 
@@ -91,6 +92,7 @@ class SelectionGizmo(WorldObject):
         self._leave = leave
         self._callback_after = callback_after
         self._callback_during = callback_during
+        self._name = name
 
     @property
     def bounds(self):
@@ -200,13 +202,16 @@ class SelectionGizmo(WorldObject):
 
     def _start_drag(self, event):
         """Initialize the drag."""
+        # Set the positions of the selection rectangle
+        world_pos = self._screen_to_world((event.x, event.y))
+
+        if world_pos is None:
+            return
+
         # Set the rectangle to visible
         self.visible = True
         self._active = True
         self._event_modifiers = event.modifiers
-
-        # Set the positions of the selection rectangle
-        world_pos = self._screen_to_world((event.x, event.y))
 
         if self._outline:
             self._outline.geometry.positions.data[:, 0] = world_pos[0]
@@ -268,6 +273,9 @@ class SelectionGizmo(WorldObject):
         # Set the positions of the rectangle
         world_pos = self._screen_to_world((event.x, event.y))
 
+        if world_pos is None:
+            return
+
         if self._force_square:
             dx, dy, dz = world_pos - self._sel["start"]
             dmin = min(abs(dx), abs(dy))
@@ -298,7 +306,7 @@ class SelectionGizmo(WorldObject):
         self._update_info()
 
         if self.debug:
-            print("Moving to ", world_pos)
+            print(f"{self._name} moving to {world_pos}")
             point = gfx.Points(
                 gfx.Geometry(
                     positions=np.array(
