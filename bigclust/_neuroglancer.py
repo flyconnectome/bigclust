@@ -62,8 +62,6 @@ class NglViewer:
 
         # Holds the futures for requested data
         self.futures = {}
-        self._futures_check_counter = 0
-        self._futures_check_rate = 30
         self.n_failed = 0  # track the number of failed requests
         self.pool = ThreadPoolExecutor(max_threads)
 
@@ -353,14 +351,6 @@ class NglViewer:
 
     def check_futures(self):
         """Check if any futures are done."""
-        # Skip if we're not checking this frame
-        if self._futures_check_counter % self._futures_check_rate:
-            self._futures_check_counter += 1
-            return
-
-        # Reset the counter
-        self._futures_check_counter = 0
-
         # Keep track of whether we had any futures at the beginning
         has_futures = len(self.futures) > 0
 
