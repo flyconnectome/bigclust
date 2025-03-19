@@ -269,11 +269,11 @@ class Dendrogram(Figure):
         def _toggle_last_label():
             """Toggle between the last label and the original labels."""
             # If no controls, there is nothing to toggle
-            if not hasattr(self, '_controls'):
+            if not hasattr(self, "_controls"):
                 return
             self._controls.switch_labels()
 
-        self.key_events['m'] = _toggle_last_label
+        self.key_events["m"] = _toggle_last_label
 
         # def _deselect(event):
         #     print(event.type)
@@ -631,7 +631,9 @@ class Dendrogram(Figure):
             1,
         )  # this means it's centered and slightly in front
         widget.add(
-            text2gfx("Hover info", color=font_color, font_size=1, anchor="middle-center")
+            text2gfx(
+                "Hover info", color=font_color, font_size=1, anchor="middle-center"
+            )
         )
         widget.children[1].local.position = (
             0,
@@ -707,7 +709,7 @@ class Dendrogram(Figure):
             c for c in set(self._dendrogram["color_list"]) if str(c).startswith("C")
         ]
         palette = {
-            f"C{i+1}": tuple(c)
+            f"C{i + 1}": tuple(c)
             for i, c in enumerate(cmap.Colormap("tab10").iter_colors(len(cn_colors)))
         }
 
@@ -775,24 +777,24 @@ class Dendrogram(Figure):
             if str(c).startswith("C")
         ]
         palette = {
-            f"C{i+1}": tuple(c)
+            f"C{i + 1}": tuple(c)
             for i, c in enumerate(cmap.Colormap("tab10").iter_colors(len(cn_colors)))
         }
 
         if self._leaf_types is None:
             markers = np.full(len(self), "circle")
         else:
-            assert len(self._leaf_types) == len(
-                self
-            ), "Length of leaf_types must match length of dendrogram."
+            assert len(self._leaf_types) == len(self), (
+                "Length of leaf_types must match length of dendrogram."
+            )
             unique_types = np.unique(self._leaf_types)
             available_markers = list(gfx.MarkerShape)
             # Drop markers which look too similar to other
             available_markers.remove("ring")
 
-            assert len(unique_types) <= len(
-                available_markers
-            ), "Only 10 unique types are supported."
+            assert len(unique_types) <= len(available_markers), (
+                "Only 10 unique types are supported."
+            )
             marker_map = dict(zip(unique_types, available_markers))
             markers = np.array(
                 [marker_map[t] for t in self._leaf_types[self._dendrogram["leaves"]]]
@@ -1224,9 +1226,9 @@ class Dendrogram(Figure):
 
         """
         if callback is None:
-            assert hasattr(widget, "select") and callable(
-                widget.select
-            ), "Widget must have a `select` method that takes a list of IDs to select."
+            assert hasattr(widget, "select") and callable(widget.select), (
+                "Widget must have a `select` method that takes a list of IDs to select."
+            )
             callback = widget.select
 
         if not hasattr(self, "_synced_widgets"):
