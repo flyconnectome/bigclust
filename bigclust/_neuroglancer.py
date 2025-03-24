@@ -1,4 +1,5 @@
 import cmap
+import inspect
 import requests
 
 import dvid as dv
@@ -339,7 +340,10 @@ class NglViewer:
                 kwargs["color"] = self.viewer._next_color()
 
         try:
-            m = vol.mesh.get(x, lod=lod)[x]
+            if "lod" in inspect.signature(vol.mesh.get).parameters:
+                m = vol.mesh.get(x, lod=lod)[x]
+            else:
+                m = vol.mesh.get(x)[x]
         except BaseException as e:
             import traceback
 
