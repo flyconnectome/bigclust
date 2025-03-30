@@ -59,6 +59,7 @@ class NglViewer:
             self.viewer.add_mesh(
                 neuropil_mesh, color=(0.8, 0.8, 0.8, 0.01), name="neuropil"
             )
+            self.viewer.center_camera()
             self._centered = True
 
         # Holds the futures for requested data
