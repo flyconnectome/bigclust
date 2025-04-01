@@ -258,8 +258,10 @@ class Dendrogram(Figure):
         # )
         self.key_events["ArrowLeft"] = lambda: move_camera(-10, 0)
         self.key_events[("ArrowLeft", ("Shift",))] = lambda: move_camera(-30, 0)
+        self.key_events[("ArrowLeft", ("Shift", "Control"))] = lambda: move_camera(-100, 0)
         self.key_events["ArrowRight"] = lambda: move_camera(10, 0)
         self.key_events[("ArrowRight", ("Shift",))] = lambda: move_camera(30, 0)
+        self.key_events[("ArrowRight", ("Shift", "Control"))] = lambda: move_camera(100, 0)
 
         self.key_events["ArrowUp"] = lambda: self.set_yscale(
             self._dendrogram_group.local.matrix[1, 1] * 1.1
