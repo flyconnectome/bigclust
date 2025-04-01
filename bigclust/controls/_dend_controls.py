@@ -279,7 +279,9 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # Checkbox for debug mode
         self.ngl_debug_mode = QtWidgets.QCheckBox("Debug mode")
-        self.ngl_debug_mode.setToolTip("Whether to show debug information for the neuroglancer view")
+        self.ngl_debug_mode.setToolTip(
+            "Whether to show debug information for the neuroglancer view"
+        )
         self.ngl_debug_mode.setChecked(False)
         self.ngl_debug_mode.stateChanged.connect(self.set_ngl_debug)
         self.tab3_layout.addWidget(self.ngl_debug_mode)
@@ -321,6 +323,91 @@ class DendrogramControls(QtWidgets.QWidget):
             render_trigger_vals.index(self.figure.render_trigger)
         )
         self.tab4_layout.addWidget(self.render_mode_dropdown)
+
+        # Add slide for max frame rate
+        self.max_frame_rate_label = QtWidgets.QLabel("Max frame rate:")
+        self.max_frame_rate_label.setToolTip(
+            "Set the maximum frame rate for the dendrogram. Press F while the dendrogram window is active to show current frame rate."
+        )
+        self.tab4_layout.addWidget(self.max_frame_rate_label)
+
+        self.max_frame_rate_layout = QtWidgets.QHBoxLayout()
+        self.tab4_layout.addLayout(self.max_frame_rate_layout)
+
+        self.max_frame_rate_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.max_frame_rate_slider.setRange(5, 100)
+        self.max_frame_rate_slider.setValue(self.figure.max_fps)
+        self.max_frame_rate_slider.valueChanged.connect(
+            lambda x: setattr(self.figure, "max_fps", int(x))
+        )
+        self.max_frame_rate_slider.valueChanged.connect(
+            lambda x: self.max_frame_rate_value_label.setText(f"{x} FPS")
+        )
+        self.max_frame_rate_layout.addWidget(self.max_frame_rate_slider)
+
+        self.max_frame_rate_value_label = QtWidgets.QLabel(
+            f"{int(self.figure.max_fps)} FPS"
+        )
+        self.max_frame_rate_layout.addWidget(self.max_frame_rate_value_label)
+
+        # Add SpinBox for font size
+        hlayout = QtWidgets.QHBoxLayout()
+        self.tab4_layout.addLayout(hlayout)
+        self.font_size_label = QtWidgets.QLabel("Font size:")
+        self.font_size_label.setToolTip(
+            "Set the font size for the labels in the dendrogram."
+        )
+        hlayout.addWidget(self.font_size_label)
+        self.font_size_slider = QtWidgets.QSpinBox()
+        self.font_size_slider.setRange(1, 200)
+        self.font_size_slider.setValue(self.figure.font_size)
+        self.font_size_slider.valueChanged.connect(
+            lambda x: setattr(self.figure, "font_size", int(x))
+        )
+        hlayout.addWidget(self.font_size_slider)
+
+        # Add SpinBox for label rotation
+        hlayout = QtWidgets.QHBoxLayout()
+        self.tab4_layout.addLayout(hlayout)
+        self.label_rotation_label = QtWidgets.QLabel("Label rotation:")
+        self.label_rotation_label.setToolTip(
+            "Set the rotation for the labels in the dendrogram."
+        )
+        hlayout.addWidget(self.label_rotation_label)
+        self.label_rotation_slider = QtWidgets.QSpinBox()
+        self.label_rotation_slider.setRange(0, 360)
+        self.label_rotation_slider.setValue(self.figure.label_rotation)
+        self.label_rotation_slider.valueChanged.connect(
+            lambda x: setattr(self.figure, "label_rotation", int(x))
+        )
+        hlayout.addWidget(self.label_rotation_slider)
+
+        # Add slider for number of labels visible at once
+        self.max_label_vis = QtWidgets.QLabel("Max visible labels:")
+        self.max_label_vis.setToolTip(
+            "Set the maximum number of labels visible at once. This is useful for large datasets. May negatively impact performance."
+        )
+        self.tab4_layout.addWidget(self.max_label_vis)
+
+        self.max_label_vis_layout = QtWidgets.QHBoxLayout()
+        self.tab4_layout.addLayout(self.max_label_vis_layout)
+
+        self.max_label_vis_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.max_label_vis_slider.setRange(1, 5_000)
+        self.max_label_vis_slider.setValue(self.figure.label_vis_limit)
+        self.max_label_vis_slider.valueChanged.connect(
+            lambda x: setattr(self.figure, "label_vis_limit", int(x))
+        )
+        self.max_label_vis_slider.valueChanged.connect(
+            lambda x: self.max_label_vis_value_label.setText(f"{x} labels")
+        )
+        self.max_label_vis_layout.addWidget(self.max_label_vis_slider)
+
+        self.max_label_vis_value_label = QtWidgets.QLabel(
+            f"{int(self.figure.label_vis_limit)} labels"
+        )
+        self.max_label_vis_layout.addWidget(self.max_label_vis_value_label)
+
 
         # This makes it so the legend does not stretch
         self.tab4_layout.addStretch(1)

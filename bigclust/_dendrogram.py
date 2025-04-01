@@ -95,7 +95,7 @@ class Dendrogram(Figure):
         self._leaf_types = (
             np.asarray(table[leaf_types]) if leaf_types is not None else None
         )
-        self._rotate_labels = True
+        self._label_rotation = 1  # rotate labels by 58 degrees (this is in radiance)
         self._selected = None
 
         if hover_info is not None:
@@ -553,6 +553,37 @@ class Dendrogram(Figure):
             self._hover_widget.local.scale = [size, size, size]
 
     @property
+    def label_rotation(self):
+        return np.rad2deg(getattr(self, "_label_rotation", 0))
+
+    @label_rotation.setter
+    @update_figure
+    def label_rotation(self, angle):
+        # This has to be in radians
+        self._label_rotation = np.deg2rad(angle)
+        for t in self._label_visuals:
+            if isinstance(t, gfx.Text):
+                if not self._label_rotation:
+                    # Track where this label is supposed to show up (for scaling)
+                    t._absolute_position_y = -0.25
+
+                    # Center the text
+                    t.text_align = "center"
+                else:
+                    t.text_align = "right"
+                    t.local.y = t._absolute_position_y = -1
+
+                    if self._label_rotation < np.deg2rad(70):
+                        t.anchor = "top-right"
+                    elif self._label_rotation > np.deg2rad(110):
+                        t.anchor = "bottom-right"
+                    else:
+                        t.anchor = "middle-right"
+                        t.local.y = t._absolute_position_y = -5
+
+                    t.local.euler_z = self._label_rotation
+
+    @property
     def leaf_size(self):
         return self._leaf_size
 
@@ -971,12 +1002,10 @@ class Dendrogram(Figure):
                 t.text_align = "center"
 
                 # Rotate labels to avoid overlap
-                if self._rotate_labels:
+                if self._label_rotation:
                     t.anchor = "topright"
                     t.text_align = "right"
-                    t.local.euler_z = (
-                        1  # slightly slanted, use `math.pi / 2` for 90 degress
-                    )
+                    t.local.euler_z = self._label_rotation
                     t.local.y = t._absolute_position_y = -1
 
             self._label_visuals[original_ix].visible = True
