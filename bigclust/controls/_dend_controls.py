@@ -456,6 +456,10 @@ class DendrogramControls(QtWidgets.QWidget):
 
         # Now add the new items currently selected
         for label in sorted(list(set(self.figure.selected_labels))):
+            # Skip if this label is NaN or None (i.e. not a string)
+            if not isinstance(label, str):
+                continue
+
             if re.match(".*?\([0-9]+\)", label):
                 label = label.split("(")[0]
 

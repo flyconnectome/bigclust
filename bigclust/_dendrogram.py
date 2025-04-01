@@ -4,6 +4,7 @@ import cmap
 
 import pygfx as gfx
 import numpy as np
+import pandas as pd
 import pylinalg as la
 
 from functools import partial
@@ -84,6 +85,9 @@ class Dendrogram(Figure):
             np.array(table[labels].values) if labels is not None else None
         )  # make sure to use  a copy
         if self._labels is not None:
+            # Make sure we don't have NaNs in the labels
+            self._labels[pd.isnull(self._labels)] = "NaN"
+
             # `_label_visuals` is in the same order as `_labels`
             self._label_visuals = [None] * len(self._labels)
         self._ids = np.asarray(table[ids]) if ids is not None else None
