@@ -1,6 +1,7 @@
 import re
 import math
 import cmap
+import inspect
 
 import pygfx as gfx
 import numpy as np
@@ -128,9 +129,16 @@ class Dendrogram(Figure):
             self._labels[self._leafs_order] if self._labels is not None else None
         )
 
-        # This is the order of IDs the dendrogram left to right
+        # This is the order of IDs in the dendrogram left to right
         self._ids_ordered = (
             self._ids[self._leafs_order] if self._ids is not None else None
+        )
+        # This is the order of datasets in the dendrogram left to right
+        # so we can avoid collisions when the same ID is used in different datasets
+        self._datasets_ordered = (
+            self._table["dataset"].values[self._leafs_order]
+            if "dataset" in self._table.columns
+            else None
         )
 
         if self._clusters is not None:
@@ -258,10 +266,14 @@ class Dendrogram(Figure):
         # )
         self.key_events["ArrowLeft"] = lambda: move_camera(-10, 0)
         self.key_events[("ArrowLeft", ("Shift",))] = lambda: move_camera(-30, 0)
-        self.key_events[("ArrowLeft", ("Shift", "Control"))] = lambda: move_camera(-100, 0)
+        self.key_events[("ArrowLeft", ("Shift", "Control"))] = lambda: move_camera(
+            -100, 0
+        )
         self.key_events["ArrowRight"] = lambda: move_camera(10, 0)
         self.key_events[("ArrowRight", ("Shift",))] = lambda: move_camera(30, 0)
-        self.key_events[("ArrowRight", ("Shift", "Control"))] = lambda: move_camera(100, 0)
+        self.key_events[("ArrowRight", ("Shift", "Control"))] = lambda: move_camera(
+            100, 0
+        )
 
         self.key_events["ArrowUp"] = lambda: self.set_yscale(
             self._dendrogram_group.local.matrix[1, 1] * 1.1
@@ -501,8 +513,8 @@ class Dendrogram(Figure):
             # `self._selected` is in order of the dendrogram, we need to translate it to the original order
             if len(self._selected) > 0:
                 self._ngl_viewer.show(
-                    # self._leafs_order[self._selected],
                     self._ids_ordered[self.selected],
+                    datasets=self._datasets_ordered[self.selected],
                     add_as_group=getattr(self, "_add_as_group", False),
                 )
             else:
@@ -512,7 +524,16 @@ class Dendrogram(Figure):
             for w, func in self._synced_widgets:
                 try:
                     # func(self._leafs_order[self._selected])
-                    func(self._ids_ordered[self.selected])
+                    if (
+                        "datasets" in inspect.signature(func).parameters
+                        and self._datasets_ordered is not None
+                    ):
+                        func(
+                            self._ids_ordered[self.selected],
+                            datasets=self._datasets_ordered[self.selected],
+                        )
+                    else:
+                        func(self._ids_ordered[self.selected])
                 except BaseException as e:
                     print(f"Failed to sync widget {w}:\n", e)
 
@@ -1258,6 +1279,8 @@ class Dendrogram(Figure):
         callback
                 The function to call. If `None`, the widget must implement a
                 `.select()` method that takes a list of IDs to select.
+                If either method accepts a `datasets` parameter, the dataset for
+                each ID will also be passed to the method.
 
         """
         if callback is None:
@@ -1304,7 +1327,17 @@ class Dendrogram(Figure):
             colors = {}
             for vis in self._leaf_visuals:
                 this_ids = self._ids_ordered[vis._leaf_ix]
-                colors.update(zip(this_ids, vis.geometry.colors.data))
+
+                if self._datasets_ordered is None:
+                    colors.update(zip(this_ids, vis.geometry.colors.data))
+                else:
+                    this_datasets = self._datasets_ordered[vis._leaf_ix]
+                    colors.update(
+                        zip(
+                            zip(this_ids, this_datasets),
+                            vis.geometry.colors.data,
+                        )
+                    )
         elif mode == "label":
             labels_unique = np.unique(self._labels_ordered)
             palette = cmap.Colormap(palette)
@@ -1312,7 +1345,13 @@ class Dendrogram(Figure):
                 l: c.hex
                 for l, c in zip(labels_unique, palette.iter_colors(len(labels_unique)))
             }
-            colors = {l: colormap[l] for l in self._labels_ordered}
+            if self._datasets_ordered is None:
+                colors = {i: colormap[l] for i, l in zip(self._ids_ordered, self._labels_ordered)}
+            else:
+                colors = {
+                    (i, d): colormap[l]
+                    for i, l, d in zip(self._ids_ordered, self._labels_ordered, self._datasets_ordered)
+                }
         elif mode == "dataset":
             palette = cmap.Colormap(palette)
             colormap = {
@@ -1326,7 +1365,16 @@ class Dendrogram(Figure):
             for i, vis in enumerate(self._leaf_visuals):
                 this_ids = self._ids_ordered[vis._leaf_ix]
                 this_c = colormap[i]
-                colors.update({i: this_c for this_id in this_ids})
+                if self._datasets_ordered is None:
+                    colors.update({i: this_c for this_id in this_ids})
+                else:
+                    this_datasets = self._datasets_ordered[vis._leaf_ix]
+                    colors.update(
+                        {
+                            (this_id, this_dataset): this_c
+                            for this_id, this_dataset in zip(this_ids, this_datasets)
+                        }
+                    )
         elif mode == "default":
             self._ngl_viewer.set_default_colors()
             return

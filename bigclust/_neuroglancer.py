@@ -38,11 +38,25 @@ class NglViewer:
         title="Octarine Viewer",
     ):
         self.debug = debug
-        self.data = (
-            data.rename({"segment_id": "id"}, axis=1)
-            .astype({"id": int})
-            .set_index("id")
-        )
+
+        # To avoid collisions when the same ID exists in multiple datasets, we will
+        # use a multi-index of (id, dataset).
+        self.data = data.copy()
+
+        # In some older DataFrames we used `segment_id` instead of `id`
+        if "segment_id" in self.data.columns and "id" not in self.data.columns:
+            self.data.rename(columns={"segment_id": "id"}, inplace=True)
+
+        self.data['id'] = self.data['id'].astype(int)  # make sure IDs are integers
+
+        if "dataset" in self.data.columns:
+            self.data.set_index(
+                ["id", "dataset"], inplace=True, drop=False, verify_integrity=True
+            )
+        else:
+            self.data.set_index(["id"], inplace=True, drop=False, verify_integrity=True)
+            self.data["dataset"] = "default"
+
         self.set_default_colors()
 
         # Parse cloudvolumes
@@ -83,7 +97,7 @@ class NglViewer:
 
     @property
     def use_cache(self):
-        return getattr(self, '_use_cache', False)
+        return getattr(self, "_use_cache", False)
 
     @use_cache.setter
     def use_cache(self, value):
@@ -94,7 +108,7 @@ class NglViewer:
         # Check for color column
         if "color" in self.data.columns:
             self._colors = self.data.color.to_dict()
-            self._colors = {int(k): cmap.Color(v).hex for k, v in self._colors.items()}
+            self._colors = {k: cmap.Color(v).hex for k, v in self._colors.items()}
         else:
             self._colors = {}
 
@@ -136,41 +150,55 @@ class NglViewer:
         if self.debug:
             print(*args, **kwargs)
 
-    def show(self, ids, lod=-1, add_as_group=False, **kwargs):
+    def show(self, ids, datasets=None, lod=-1, add_as_group=False, **kwargs):
         """Add data to the viewer.
 
         Parameters
         ----------
         ids :       iterable
                     The IDs of neurons to show.
+        datasets :  iterable, optional
+                    If provided, only show neurons where ID and dataset match.
+                    Must be of the same length as `ids`.
         kwargs :    dict
                     Keyword arguments to pass to the viewer.
 
         """
+        self.report(f"Asked to show {len(ids)} ids:", ids, flush=True)
+
         if not len(ids):
             self.report("Clearing viewer", flush=True)
             self.clear()
             return
 
-        miss = ~np.isin(ids, self.data.index.values)
+        if datasets is None:
+            to_show = self.data.loc[ids]
+            datasets = to_show.dataset.values
+        else:
+            if len(ids) != len(datasets):
+                raise ValueError("IDs and datasets must be of the same length.")
+            to_show = self.data.loc[zip(ids, datasets)]
+
+        miss = ~np.isin(ids, to_show.id.values)
         if np.any(miss):
             raise ValueError(f"IDs {ids[miss]} not found in the data.")
 
-        to_show = self.data.loc[ids]
         self.report(
-            f"Showing {len(to_show)} neurons: ",
-            to_show.index.values.tolist(),
+            f"Showing {len(to_show)} neuron(s): ",
+            to_show.id.values.tolist(),
             flush=True,
         )
 
         # Remove those segments we don't want
-        self.remove_objects([x for x in self._segments if x not in to_show.index.values])
+        self.remove_objects(
+            [x for x in self._segments if x not in to_show.index.values.tolist()]  # do not remove the .tolist() here!
+        )
 
         # Cancel all futures we don't need anymore
         # Note: we need to use list() because we're potentially
         # modifying the dict inside the loop
         for (id, _), future in list(self.futures.items()):
-            if id not in to_show.index.values:
+            if id not in to_show.index.values.tolist():
                 self.report("  Cancelling future for", id, flush=True)
 
                 # Cancel future
@@ -183,21 +211,23 @@ class NglViewer:
         to_show = to_show[~to_show.index.isin(self._segments)]
 
         for _, row in to_show.iterrows():
-            self.report("  Adding", row.name, flush=True)
+            id, dataset = row.name
+            self.report(f"  Adding {id} ({dataset})", flush=True)
 
             # Skip if we're already loading this segment
-            if row.name in self.futures:
+            if (id, dataset) in self.futures:
                 continue
 
             if not add_as_group:
-                name = f"{row.label} ({row.name})"
+                name = f"{row.label} ({row.id})"
             else:
-                name = f"group_{to_show.index.values[0]}"
+                first_id = to_show.index.values[0][0]  # remember this is a multiindex
+                name = f"group_{first_id}"
 
-            if row.name in self.cache:
-                self.report("  Using cached visual for", row.name, flush=True)
+            if (id, dataset) in self.cache:
+                self.report(f"  Using cached visual for {id} ({dataset})", flush=True)
                 # Get the cached visual
-                visual =self.cache[row.name]
+                visual = self.cache[(id, dataset)]
 
                 # It's possible that the color scheme changed or that
                 # the user changed the color manually. We will need to
@@ -205,8 +235,8 @@ class NglViewer:
                 # scene.
                 color = kwargs.get("color", None)
                 if color is None:
-                    if int(row.name) in self._colors:
-                        color = self._colors[int(row.name)]
+                    if (id, dataset) in self._colors:
+                        color = self._colors[(id, dataset)]
                     else:
                         color = self.viewer._next_color()
                 visual.material.color = gfx.Color(color)
@@ -215,12 +245,12 @@ class NglViewer:
                 visual.visible = True
 
                 self.viewer.add(visual, name=str(name), center=False)
-                self._segments[row.name] = visual
+                self._segments[(id, dataset)] = visual
             else:
-                self.report("  Loading visual for", row.name, flush=True)
-                self.futures[(row.name, name)] = self.pool.submit(
+                self.report(f"  Loading visual for {id} ({dataset})", flush=True)
+                self.futures[((id, dataset), name)] = self.pool.submit(
                     self._load_mesh,
-                    row.name,
+                    (id, dataset),
                     self.volumes[row.source],
                     lod=lod,
                     **kwargs,
@@ -258,7 +288,7 @@ class NglViewer:
         id2source = self.data.source.to_dict()
 
         # Add already loaded IDs
-        for (id, visual) in self._segments.items():
+        for id, visual in self._segments.items():
             ids_per_layer[id2source[id]].append(id)
 
         # Add IDs that are currently being loaded
@@ -331,12 +361,18 @@ class NglViewer:
 
     def _load_mesh(self, x, vol, lod=-1, **kwargs):
         """Load a single mesh."""
+        if isinstance(x, tuple):
+            x, dataset = x
+        else:
+            dataset = None
         x = int(x)
 
         # Get the color before we load the mesh
         if "color" not in kwargs:
-            if int(x) in self._colors:
-                kwargs["color"] = self._colors[int(x)]
+            if (x, dataset) in self._colors:
+                kwargs["color"] = self._colors[(x, dataset)]
+            elif x in self._colors:
+                kwargs["color"] = self._colors[x]
             else:
                 kwargs["color"] = self.viewer._next_color()
 
@@ -347,8 +383,7 @@ class NglViewer:
                 m = vol.mesh.get(x)[x]
         except BaseException as e:
             import traceback
-
-            print(f"Error loading mesh for {x}:")
+            print(f"Error loading mesh for {x} ({dataset}):")
             traceback.print_exc()
             return e
 
@@ -359,7 +394,7 @@ class NglViewer:
         # Keep track of whether we had any futures at the beginning
         has_futures = len(self.futures) > 0
 
-        for (id, name), future in self.futures.items():
+        for ((id, dataset), name), future in self.futures.items():
             if not future.done():
                 continue
             visual = future.result()
@@ -367,12 +402,12 @@ class NglViewer:
             # If there is no mesh, skip
             if isinstance(visual, BaseException):
                 self.n_failed += 1
-                self.report(f"Failed to load {id}: {visual}", flush=True)
+                self.report(f"  Failed to load {id} ({dataset}): {visual}", flush=True)
                 continue
 
-            self.report(f"Loaded {id}", flush=True)
+            self.report(f"  Adding {id} ({dataset}) as '{name}'", flush=True)
             self.viewer.add(visual, name=str(name), center=False)
-            self._segments[id] = visual
+            self._segments[(id, dataset)] = visual
 
             # Center on the first neuron
             if not self._centered:
@@ -381,8 +416,8 @@ class NglViewer:
 
             # Populate cache if necessary
             if self.use_cache:
-                self.report(f"Caching visual for {id}", flush=True)
-                self.cache[id] = visual
+                self.report(f"  Caching visual for {id}", flush=True)
+                self.cache[(id, dataset)] = visual
 
         # Show progress message
         if has_futures and len(self.futures) > 0:
