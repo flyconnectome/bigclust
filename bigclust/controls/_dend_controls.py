@@ -267,6 +267,14 @@ class DendrogramControls(QtWidgets.QWidget):
         self.ngl_copy_button.clicked.connect(self.ngl_copy)
         self.tab3_layout.addWidget(self.ngl_copy_button)
 
+        # Add checkbox to determine whether to use colours
+        self.ngl_use_colors = QtWidgets.QCheckBox("Use colors")
+        self.ngl_use_colors.setToolTip(
+            "Whether to use re-use colors from bigclust for the neuroglancer scene. If False, colours will be determined by neuroglancer."
+        )
+        self.ngl_use_colors.setChecked(True)
+        self.tab3_layout.addWidget(self.ngl_use_colors)
+
         # Dropdown to choose whether to split neurons into layers other than source
         self.ngl_split_label = QtWidgets.QLabel("Group neurons into layers by:")
         self.tab3_layout.addWidget(self.ngl_split_label)
@@ -953,7 +961,8 @@ class DendrogramControls(QtWidgets.QWidget):
         if not hasattr(self.figure, "_ngl_viewer"):
             raise ValueError("Figure has no neuroglancer viewer")
         scene = self.figure._ngl_viewer.neuroglancer_scene(
-            group_by=self.ngl_split_combo_box.currentText().lower()
+            group_by=self.ngl_split_combo_box.currentText().lower(),
+            use_colors=self.ngl_use_colors.isChecked(),
         )
         scene.open()
 
@@ -961,7 +970,8 @@ class DendrogramControls(QtWidgets.QWidget):
         if not hasattr(self.figure, "_ngl_viewer"):
             raise ValueError("Figure has no neuroglancer viewer")
         scene = self.figure._ngl_viewer.neuroglancer_scene(
-            group_by=self.ngl_split_combo_box.currentText().lower()
+            group_by=self.ngl_split_combo_box.currentText().lower(),
+            use_colors=self.ngl_use_colors.isChecked(),
         )
         scene.to_clipboard()
         self.figure.show_message(

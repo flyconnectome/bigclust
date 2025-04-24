@@ -283,7 +283,7 @@ class NglViewer:
         """Clear the cache."""
         self.cache.clear()
 
-    def neuroglancer_scene(self, group_by="source"):
+    def neuroglancer_scene(self, group_by="source", use_colors=True):
         """Generate neuroglancer scene for the current state.
 
         Parameters
@@ -292,7 +292,9 @@ class NglViewer:
                     Logic for how to group the segments. If "color" or "label" we
                     will try combine different sources by using sub-sources. This
                     will not work if IDs exist in multiple sources!
-
+        use_colors : bool
+                    Whether to use the colors from the viewer for the neuroglancer
+                    scene. If False, neuroglancer will determine the colors itself.
         """
         layers = []
         id2source = self.data.source.to_dict()
@@ -321,9 +323,10 @@ class NglViewer:
                 layer["segments"] = ids_flat
 
                 # Set colors for the segments
-                layer.set_colors(
-                    {i: self._colors.get(ii, "w") for i, ii in zip(ids_flat, ids)}
-                )
+                if use_colors:
+                    layer.set_colors(
+                        {i: self._colors.get(ii, "w") for i, ii in zip(ids_flat, ids)}
+                    )
 
                 layers.append(layer)
         elif group_by == "color":
@@ -377,7 +380,8 @@ class NglViewer:
                 layer["segments"] = ids_flat
 
                 # Set the color for the layer
-                layer.set_colors(color)
+                if use_colors:
+                    layer.set_colors(color)
 
                 layers.append(layer)
         elif group_by == "label":
@@ -419,9 +423,10 @@ class NglViewer:
                 layer["segments"] = ids_flat
 
                 # Set colors for the segments
-                layer.set_colors(
-                    {i: self._colors.get(ii, "w") for i, ii in zip(ids_flat, ids)}
-                )
+                if use_colors:
+                    layer.set_colors(
+                        {i: self._colors.get(ii, "w") for i, ii in zip(ids_flat, ids)}
+                    )
 
                 layers.append(layer)
         else:

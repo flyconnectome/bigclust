@@ -118,7 +118,7 @@ class ScatterControls(QtWidgets.QWidget):
         )
         for item in ("UMAP", "MDS"):
             self.umap_method_combo_box.addItem(item)
-        if hasattr(self.figure, '_vects') and self.figure._vects is not None:
+        if hasattr(self.figure, "_vects") and self.figure._vects is not None:
             self.umap_method_combo_box.addItem("PaCMAP")
         self.umap_method_combo_box.currentIndexChanged.connect(
             self.update_umap_settings
@@ -455,6 +455,14 @@ class ScatterControls(QtWidgets.QWidget):
         self.ngl_copy_button.clicked.connect(self.ngl_copy)
         self.tab3_layout.addWidget(self.ngl_copy_button)
 
+        # Add checkbox to determine whether to use colours
+        self.ngl_use_colors = QtWidgets.QCheckBox("Use colors")
+        self.ngl_use_colors.setToolTip(
+            "Whether to use re-use colors from bigclust for the neuroglancer scene. If False, colours will be determined by neuroglancer."
+        )
+        self.ngl_use_colors.setChecked(True)
+        self.tab3_layout.addWidget(self.ngl_use_colors)
+
         # Dropdown to choose whether to split neurons into layers other than source
         self.ngl_split_label = QtWidgets.QLabel("Group neurons into layers by:")
         self.tab3_layout.addWidget(self.ngl_split_label)
@@ -559,7 +567,7 @@ class ScatterControls(QtWidgets.QWidget):
         )
         hlayout.addWidget(self.font_size_label)
         self.font_size_slider = QtWidgets.QDoubleSpinBox()
-        self.font_size_slider.setRange(.0001, 200)
+        self.font_size_slider.setRange(0.0001, 200)
         self.font_size_slider.setSingleStep(0.2)
         self.font_size_slider.setValue(self.figure.font_size)
         self.font_size_slider.valueChanged.connect(
@@ -1159,7 +1167,8 @@ class ScatterControls(QtWidgets.QWidget):
         if not hasattr(self.figure, "_ngl_viewer"):
             raise ValueError("Figure has no neuroglancer viewer")
         scene = self.figure._ngl_viewer.neuroglancer_scene(
-            group_by=self.ngl_split_combo_box.currentText().lower()
+            group_by=self.ngl_split_combo_box.currentText().lower(),
+            use_colors=self.ngl_use_colors.isChecked(),
         )
         scene.open()
 
@@ -1167,7 +1176,8 @@ class ScatterControls(QtWidgets.QWidget):
         if not hasattr(self.figure, "_ngl_viewer"):
             raise ValueError("Figure has no neuroglancer viewer")
         scene = self.figure._ngl_viewer.neuroglancer_scene(
-            group_by=self.ngl_split_combo_box.currentText().lower()
+            group_by=self.ngl_split_combo_box.currentText().lower(),
+            use_colors=self.ngl_use_colors.isChecked(),
         )
         scene.to_clipboard()
         self.figure.show_message(
@@ -1214,11 +1224,8 @@ class ScatterControls(QtWidgets.QWidget):
             import pacmap
 
             fit = pacmap.PaCMAP(
-                n_components=2,
-                n_neighbors=10,
-                MN_ratio=0.5,
-                FP_ratio=2.0
-                )
+                n_components=2, n_neighbors=10, MN_ratio=0.5, FP_ratio=2.0
+            )
 
         if isinstance(self.figure._dists, dict):
             dists = self.figure._dists[self.umap_dist_combo_box.currentText()]
