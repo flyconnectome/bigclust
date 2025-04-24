@@ -115,12 +115,12 @@ class NglViewer:
     def set_colors(self, colors):
         """Set the colors for the neurons."""
         assert isinstance(colors, dict)
-        self._colors = colors
+        self._colors = {k: cmap.Color(v).hex for k, v in colors.items()}
 
     def update_colors(self, colors):
         """Update the colors for the neurons."""
         assert isinstance(colors, dict)
-        self._colors.update(colors)
+        self._colors.update({k: cmap.Color(v).hex for k, v in colors.items()})
 
     def make_volume(self, url, mip=0):
         """Make a volume from a URL."""
