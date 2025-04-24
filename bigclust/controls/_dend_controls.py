@@ -267,7 +267,19 @@ class DendrogramControls(QtWidgets.QWidget):
         self.ngl_copy_button.clicked.connect(self.ngl_copy)
         self.tab3_layout.addWidget(self.ngl_copy_button)
 
-        # Checkbox for whether to show label lines
+        # Dropdown to choose whether to split neurons into layers other than source
+        self.ngl_split_label = QtWidgets.QLabel("Group neurons into layers by:")
+        self.tab3_layout.addWidget(self.ngl_split_label)
+        self.ngl_split_combo_box = QtWidgets.QComboBox()
+        self.ngl_split_combo_box.addItem("Source")
+        self.ngl_split_combo_box.addItem("Color")
+        self.ngl_split_combo_box.addItem("Label")
+        self.tab3_layout.addWidget(self.ngl_split_combo_box)
+        self.ngl_split_label.setToolTip(
+            "Determine how neurons are grouped into layers."
+        )
+
+        # Checkbox for whether to cache neurons
         self.ngl_cache_neurons = QtWidgets.QCheckBox("Cache neurons")
         self.ngl_cache_neurons.setToolTip("Whether cache neuron meshes.")
         if hasattr(self.figure, "_ngl_viewer"):
@@ -407,7 +419,6 @@ class DendrogramControls(QtWidgets.QWidget):
             f"{int(self.figure.label_vis_limit)} labels"
         )
         self.max_label_vis_layout.addWidget(self.max_label_vis_value_label)
-
 
         # This makes it so the legend does not stretch
         self.tab4_layout.addStretch(1)
@@ -941,13 +952,17 @@ class DendrogramControls(QtWidgets.QWidget):
     def ngl_open(self):
         if not hasattr(self.figure, "_ngl_viewer"):
             raise ValueError("Figure has no neuroglancer viewer")
-        scene = self.figure._ngl_viewer.neuroglancer_scene()
+        scene = self.figure._ngl_viewer.neuroglancer_scene(
+            group_by=self.ngl_split_combo_box.currentText().lower()
+        )
         scene.open()
 
     def ngl_copy(self):
         if not hasattr(self.figure, "_ngl_viewer"):
             raise ValueError("Figure has no neuroglancer viewer")
-        scene = self.figure._ngl_viewer.neuroglancer_scene()
+        scene = self.figure._ngl_viewer.neuroglancer_scene(
+            group_by=self.ngl_split_combo_box.currentText().lower()
+        )
         scene.to_clipboard()
         self.figure.show_message(
             "Link copied to clipboard", color="lightgreen", duration=2

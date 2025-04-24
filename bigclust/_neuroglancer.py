@@ -47,7 +47,7 @@ class NglViewer:
         if "segment_id" in self.data.columns and "id" not in self.data.columns:
             self.data.rename(columns={"segment_id": "id"}, inplace=True)
 
-        self.data['id'] = self.data['id'].astype(int)  # make sure IDs are integers
+        self.data["id"] = self.data["id"].astype(int)  # make sure IDs are integers
 
         if "dataset" in self.data.columns:
             self.data.set_index(
@@ -191,7 +191,9 @@ class NglViewer:
 
         # Remove those segments we don't want
         self.remove_objects(
-            [x for x in self._segments if x not in to_show.index.values.tolist()]  # do not remove the .tolist() here!
+            [
+                x for x in self._segments if x not in to_show.index.values.tolist()
+            ]  # do not remove the .tolist() here!
         )
 
         # Cancel all futures we don't need anymore
@@ -281,19 +283,151 @@ class NglViewer:
         """Clear the cache."""
         self.cache.clear()
 
-    def neuroglancer_scene(self):
-        """Generate neuroglancer scene for the current state."""
-        # Go over all visible segments and get their layers
-        ids_per_layer = {source: [] for source in self.data.source.unique()}
+    def neuroglancer_scene(self, group_by="source"):
+        """Generate neuroglancer scene for the current state.
+
+        Parameters
+        ----------
+        groupby :   "source" | "color" | "label"
+                    Logic for how to group the segments. If "color" or "label" we
+                    will try combine different sources by using sub-sources. This
+                    will not work if IDs exist in multiple sources!
+
+        """
+        layers = []
         id2source = self.data.source.to_dict()
+        if group_by == "source":
+            for source in self.data.source.unique():
+                layer = ngl.SegmentationLayer(source)
+                layer["source"] = {
+                    "url": fix_dvid_source(source),
+                    "subsources": {
+                        "default": True,
+                        "meshes": True,
+                        "bounds": False,
+                        "skeletons": False,
+                    },
+                }
+                # Collect all IDs for this source
+                ids = [i for i, _ in self._segments.items() if id2source[i] == source]
+                ids += [i for i, _ in self.futures.keys() if id2source[i] == source]
 
-        # Add already loaded IDs
-        for id, visual in self._segments.items():
-            ids_per_layer[id2source[id]].append(id)
+                # IDs can be a list of (id, dataset) tuples or just a list of IDs
+                if len(ids) and isinstance(ids[0], (list, tuple)):
+                    ids_flat = [x[0] for x in ids]
+                else:
+                    ids_flat = ids
 
-        # Add IDs that are currently being loaded
-        for (id, visual), future in self.futures.items():
-            ids_per_layer[id2source[id]].append(id)
+                layer["segments"] = ids_flat
+
+                # Set colors for the segments
+                layer.set_colors(
+                    {i: self._colors.get(ii, "w") for i, ii in zip(ids_flat, ids)}
+                )
+
+                layers.append(layer)
+        elif group_by == "color":
+            # Group by color
+            for color in list(set(self._colors.values())):
+                layer = ngl.SegmentationLayer(color)
+
+                # Collect all IDs for this color
+                ids = [
+                    i
+                    for i, _ in self._segments.items()
+                    if self._colors.get(i, None) == color
+                ]
+                ids += [
+                    i
+                    for i, _ in self.futures.keys()
+                    if self._colors.get(i, None) == color
+                ]
+
+                # If there are no IDs with this color we can skip this color
+                if len(ids) == 0:
+                    continue
+
+                # Collect the sources for this colors
+                sources = list(set([id2source[i] for i in ids]))
+
+                # Sort sources such that the DVID source comes first
+                sources = sorted(
+                    sources, key=lambda x: x.startswith("dvid://"), reverse=True
+                )
+                layer["source"] = []
+                for source in sources:
+                    # Add the source to the layer
+                    layer["source"].append(
+                        {
+                            "url": fix_dvid_source(source),
+                            "subsources": {
+                                "default": True,
+                                "meshes": True,
+                                "bounds": False,
+                                "skeletons": False,
+                            },
+                        }
+                    )
+
+                # IDs can be a list of (id, dataset) tuples or just a list of IDs
+                if isinstance(ids[0], (list, tuple)):
+                    ids_flat = [x[0] for x in ids]
+                else:
+                    ids_flat = ids
+                layer["segments"] = ids_flat
+
+                # Set the color for the layer
+                layer.set_colors(color)
+
+                layers.append(layer)
+        elif group_by == "label":
+            # Map the labels in the viewer's legend to IDs
+            object2id = {v: k for k, v in self._segments.items()}
+            label2id = {
+                label: [object2id[o] for o in objects if o in object2id]
+                for label, objects in self.viewer.objects.items()
+            }
+            label2id = {k: v for k, v in label2id.items() if len(v) > 0}
+            for label, ids in label2id.items():
+                layer = ngl.SegmentationLayer(label)
+
+                sources = list(set([id2source[i] for i in ids]))
+                # Sort sources such that the DVID source comes first
+                sources = sorted(
+                    sources, key=lambda x: x.startswith("dvid://"), reverse=True
+                )
+                layer["source"] = []
+                for source in sources:
+                    # Add the source to the layer
+                    layer["source"].append(
+                        {
+                            "url": fix_dvid_source(source),
+                            "subsources": {
+                                "default": True,
+                                "meshes": True,
+                                "bounds": False,
+                                "skeletons": False,
+                            },
+                        }
+                    )
+
+                # IDs can be a list of (id, dataset) tuples or just a list of IDs
+                if isinstance(ids[0], (list, tuple)):
+                    ids_flat = [x[0] for x in ids]
+                else:
+                    ids_flat = ids
+                layer["segments"] = ids_flat
+
+                # Set colors for the segments
+                layer.set_colors(
+                    {i: self._colors.get(ii, "w") for i, ii in zip(ids_flat, ids)}
+                )
+
+                layers.append(layer)
+        else:
+            raise ValueError(
+                f"Unknown group_by value: {group_by}. Must be one of 'source', 'color', or 'label'."
+            )
 
         # Generate the scene
         s = ngl.Scene()
@@ -302,41 +436,17 @@ class NglViewer:
         s["position"] = [385865.5, 248967.5, 123749.5]  # Default position
         s["projectionScale"] = 495090.6406803968
 
-        # Sort the layers such that the DVID source comes first
+        # Sort layers such that the DVID source comes first
         # (this is a hack to make sure neuroglancer has bounds to work with)
-        sources = sorted(
-            ids_per_layer.keys(), key=lambda x: x.startswith("dvid://"), reverse=True
-        )
+        def is_dvid_source(layer):
+            if isinstance(layer["source"], list):
+                return layer["source"][0]["url"].startswith("dvid://")
+            else:
+                return layer["source"]["url"].startswith("dvid://")
 
-        for source in sources:
-            ids = ids_per_layer[source]
-            # Translate "{node}:master" to the actual master node
-            if source.startswith("dvid://") and ":master" in source:
-                url = source.replace("dvid://", "")
-                url = url.split("?")[0]
-                server, node = url.replace("https://", "").split("/")[:2]
-                # Get the master node
-                master_node = get_master_node(
-                    node.replace(":master", ""), f"https://{server}"
-                )
-                # Replace the node with the master node
-                source = source.replace(node, master_node)
-
-            layer = ngl.SegmentationLayer(source)
-            layer["segments"] = ids
-            layer["source"] = {
-                "url": source,
-                "subsources": {
-                    "default": True,
-                    "meshes": True,
-                    "bounds": False,
-                    "skeletons": False,
-                },
-            }
-
-            # Set colors
-            layer.set_colors({i: self._colors.get(i, "w") for i in ids})
-
+        layers = sorted(layers, key=lambda x: is_dvid_source(x), reverse=True)
+        for layer in layers:
+            # Add the layer to the scene
             s.add_layers(layer)
 
         if self._neuropil_source is not None:
@@ -356,6 +466,14 @@ class NglViewer:
                 },
             }
             s.add_layers(layer)
+
+        if self.debug:
+            print("Neuroglancer scene:")
+            from pprint import pprint
+
+            pprint(s.state)
+            for layer in s.layers:
+                pprint(layer.state)
 
         return s
 
@@ -383,6 +501,7 @@ class NglViewer:
                 m = vol.mesh.get(x)[x]
         except BaseException as e:
             import traceback
+
             print(f"Error loading mesh for {x} ({dataset}):")
             traceback.print_exc()
             return e
@@ -529,3 +648,17 @@ class PrecomputedMesh:
 def get_master_node(node, server):
     """Cached function to get the master node name."""
     return dv.get_master_node(node, server)
+
+
+def fix_dvid_source(source):
+    """Potentially fix :master in DVID sources."""
+    if source.startswith("dvid://") and ":master" in source:
+        url = source.replace("dvid://", "")
+        url = url.split("?")[0]
+        server, node = url.replace("https://", "").split("/")[:2]
+        # Get the master node
+        master_node = get_master_node(node.replace(":master", ""), f"https://{server}")
+        # Replace the node with the master node
+        source = source.replace(node, master_node)
+
+    return source
