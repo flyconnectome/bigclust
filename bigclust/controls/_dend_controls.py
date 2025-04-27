@@ -508,18 +508,27 @@ class DendrogramControls(QtWidgets.QWidget):
         )
 
         # Make a separate layout with tighter margins for the buttons
-        button_layout = QtWidgets.QVBoxLayout()
-        button_layout.setSpacing(0)  # No space between buttons
-        button_layout.setContentsMargins(0, 0, 0, 0)  # No margins around the buttons
-        self.tab2_layout.addLayout(button_layout)
+        grid_layout = QtWidgets.QGridLayout()
+        grid_layout.setContentsMargins(0, 0, 0, 0)  # No margins around the grid
+        grid_layout.setSpacing(0)  # No space between buttons
+        grid_layout.setColumnStretch(1, 1)  # Make the button column stretchable
+        self.tab2_layout.addLayout(grid_layout)
 
-        # Add button to set new Clio group
+        # Add checkbox + button to set new Clio group
+        checkbox = QtWidgets.QCheckBox(" ")  # Do not remove the whitespace!
+        checkbox.setToolTip("Check to activate the button to set a new Clio group.")
+        checkbox.setChecked(False)
+        checkbox.stateChanged.connect(
+            lambda x: self.clio_group_button.setEnabled(x == 2)
+        )
+        grid_layout.addWidget(checkbox, 0, 0)
         self.clio_group_button = QtWidgets.QPushButton("Set new Clio group")
         self.clio_group_button.setToolTip(
             "Assign new Clio group. This will use the lowest body ID as group ID."
         )
         self.clio_group_button.clicked.connect(self.new_clio_group)
-        button_layout.addWidget(self.clio_group_button)
+        self.clio_group_button.setEnabled(False)
+        grid_layout.addWidget(self.clio_group_button, 0, 1)
 
         # Add button to suggest new MCNS type
         self.suggest_type_button = QtWidgets.QPushButton("Suggest male-only type")
@@ -527,21 +536,29 @@ class DendrogramControls(QtWidgets.QWidget):
             "Suggest new male-only type based on main input neuropil(s). See console for output."
         )
         self.suggest_type_button.clicked.connect(self.suggest_type)
-        button_layout.addWidget(self.suggest_type_button)
+        grid_layout.addWidget(self.suggest_type_button, 1, 0, 1, -1)
 
         # Add button to suggest new CB type
         self.suggest_cb_type_button = QtWidgets.QPushButton("Suggest new CB-type")
         self.suggest_cb_type_button.setToolTip("Suggest new CBXXXX type.")
         self.suggest_cb_type_button.clicked.connect(self.suggest_cb_type)
-        button_layout.addWidget(self.suggest_cb_type_button)
+        grid_layout.addWidget(self.suggest_cb_type_button, 2, 0, 1, -1)
 
-        # Add button to set new super type
+        # Add checkbox + button to set new super type
+        checkbox = QtWidgets.QCheckBox(" ")  # Do not remove the whitespace!
+        checkbox.setToolTip("Check to activate the button to set a new supertype.")
+        checkbox.setChecked(False)
+        checkbox.stateChanged.connect(
+            lambda x: self.set_supertype_button.setEnabled(x == 2)
+        )
+        grid_layout.addWidget(checkbox, 3, 0)
         self.set_supertype_button = QtWidgets.QPushButton("Set new SuperType")
         self.set_supertype_button.setToolTip(
             "Assign selected neurons to a supertype. This will use the lowest ID as supertype ID."
         )
         self.set_supertype_button.clicked.connect(self.new_super_type)
-        button_layout.addWidget(self.set_supertype_button)
+        self.set_supertype_button.setEnabled(False)
+        grid_layout.addWidget(self.set_supertype_button, 3, 1)
 
         # This makes it so the legend does not stretch
         self.tab2_layout.addStretch(1)
