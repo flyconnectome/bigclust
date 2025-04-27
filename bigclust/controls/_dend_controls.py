@@ -449,27 +449,40 @@ class DendrogramControls(QtWidgets.QWidget):
         self.clear_ann_button.clicked.connect(self.clear_annotation)
         self.tab2_layout.addWidget(self.clear_ann_button)
 
-        # Add checkboxes
-        self.set_label = QtWidgets.QLabel("Which fields to set:")
-        self.tab2_layout.addWidget(self.set_label)
+        self.tab2_layout.addWidget(QtWidgets.QLabel("Which fields to set/clear:"))
 
-        self.set_type_check = QtWidgets.QCheckBox("Clio: type")
-        self.set_type_check.setToolTip("Set the `type` field in Clio")
-        self.tab2_layout.addWidget(self.set_type_check)
+        # Create a horizontal layout to hold the two vertical layouts:
+        # one for Clio and one for FlyTable
+        horizontal_layout = QtWidgets.QHBoxLayout()
+        self.tab2_layout.addLayout(horizontal_layout)
 
-        self.set_flywire_check = QtWidgets.QCheckBox("Clio: flywire_type")
-        self.set_flywire_check.setToolTip("Set the `flywire_type` field in Clio")
-        self.set_flywire_check.setChecked(False)
-        self.tab2_layout.addWidget(self.set_flywire_check)
+        # Create the first vertical layout
+        left_vertical_layout = QtWidgets.QVBoxLayout()
+        horizontal_layout.addLayout(left_vertical_layout)
 
-        self.set_manc_check = QtWidgets.QCheckBox("Clio: manc_type")
-        self.set_manc_check.setToolTip("Set the `manc_type` field in Clio")
-        self.set_manc_check.setChecked(False)
-        self.tab2_layout.addWidget(self.set_manc_check)
+        left_vertical_layout.addWidget(QtWidgets.QLabel("Clio:"))
+        self.set_clio_type = QtWidgets.QCheckBox("type")
+        left_vertical_layout.addWidget(self.set_clio_type)
+        self.set_clio_flywire_type = QtWidgets.QCheckBox("flywire_type")
+        left_vertical_layout.addWidget(self.set_clio_flywire_type)
+        self.set_clio_manc_type = QtWidgets.QCheckBox("manc_type")
+        left_vertical_layout.addWidget(self.set_clio_manc_type)
 
-        self.set_mcns_type_check = QtWidgets.QCheckBox("FlyTable: malecns_type")
-        self.set_mcns_type_check.setToolTip("Set the `malecns_type` field in FlyTable")
-        self.tab2_layout.addWidget(self.set_mcns_type_check)
+        # Add a vertical line to separate the layouts
+        vertical_line = QVLine()
+        horizontal_layout.addWidget(vertical_line)
+
+        # Create the second vertical layout
+        right_vertical_layout = QtWidgets.QVBoxLayout()
+        horizontal_layout.addLayout(right_vertical_layout)
+
+        right_vertical_layout.addWidget(QtWidgets.QLabel("FlyTable:"))
+        self.set_flytable_type = QtWidgets.QCheckBox("cell_type")
+        right_vertical_layout.addWidget(self.set_flytable_type)
+        self.set_flytable_mcns_type = QtWidgets.QCheckBox("malecns_type")
+        right_vertical_layout.addWidget(self.set_flytable_mcns_type)
+        self.set_flytable_hemibrain_type = QtWidgets.QCheckBox("hemibrain_type")
+        right_vertical_layout.addWidget(self.set_flytable_hemibrain_type)
 
         self.set_label2 = QtWidgets.QLabel("Settings:")
         self.tab2_layout.addWidget(self.set_label2)
@@ -634,10 +647,12 @@ class DendrogramControls(QtWidgets.QWidget):
         """Push the current annotation to Clio/FlyTable."""
         if not any(
             (
-                self.set_flywire_check.isChecked(),
-                self.set_type_check.isChecked(),
-                self.set_mcns_type_check.isChecked(),
-                self.set_manc_check.isChecked(),
+                self.set_clio_type.isChecked(),
+                self.set_clio_flywire_type.isChecked(),
+                self.set_clio_manc_type.isChecked(),
+                self.set_flytable_type.isChecked(),
+                self.set_flytable_mcns_type.isChecked(),
+                self.set_flytable_hemibrain_type.isChecked(),
             )
         ):
             self.figure.show_message("No fields to push", color="red", duration=2)
@@ -653,6 +668,25 @@ class DendrogramControls(QtWidgets.QWidget):
         selected_ids = self.figure.selected_ids
         rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
 
+        # Which fields to set
+        clio_to_set = []
+        if self.set_clio_type.isChecked():
+            clio_to_set.append("type")
+        if self.set_clio_flywire_type.isChecked():
+            clio_to_set.append("flywire_type")
+        if self.set_clio_manc_type.isChecked():
+            clio_to_set.append("manc_type")
+        clio_to_set = tuple(clio_to_set)
+
+        flytable_to_set = []
+        if self.set_flytable_type.isChecked():
+            flytable_to_set.append("cell_type")
+        if self.set_flytable_mcns_type.isChecked():
+            flytable_to_set.append("malecns_type")
+        if self.set_flytable_hemibrain_type.isChecked():
+            flytable_to_set.append("hemibrain_type")
+        flytable_to_set = tuple(flytable_to_set)
+
         # Get the annotation
         import clio
 
@@ -666,16 +700,10 @@ class DendrogramControls(QtWidgets.QWidget):
         self.futures[(label, uuid.uuid4())] = self.pool.submit(
             _push_annotations,
             label=label,
-            bodyids=bodyids
-            if self.set_flywire_check.isChecked()
-            or self.set_type_check.isChecked()
-            or self.set_manc_check.isChecked()
-            else None,
-            rootids=rootids if self.set_mcns_type_check.isChecked() else None,
-            set_flywire=self.set_flywire_check.isChecked(),
-            set_type=self.set_type_check.isChecked(),
-            set_mcns_type=self.set_mcns_type_check.isChecked(),
-            set_manc_type=self.set_manc_check.isChecked(),
+            clio_to_set=clio_to_set,
+            flytable_to_set=flytable_to_set,
+            bodyids=bodyids if clio_to_set else None,
+            rootids=rootids if flytable_to_set else None,
             clio=clio,  #  pass the module
             ftu=ftu,  #  pass the module
             figure=self.figure,
@@ -693,10 +721,12 @@ class DendrogramControls(QtWidgets.QWidget):
         """Clear the currently selected fields."""
         if not any(
             (
-                self.set_flywire_check.isChecked(),
-                self.set_type_check.isChecked(),
-                self.set_mcns_type_check.isChecked(),
-                self.set_manc_check.isChecked(),
+                self.set_clio_type.isChecked(),
+                self.set_clio_flywire_type.isChecked(),
+                self.set_clio_manc_type.isChecked(),
+                self.set_flytable_type.isChecked(),
+                self.set_flytable_mcns_type.isChecked(),
+                self.set_flytable_hemibrain_type.isChecked(),
             )
         ):
             self.figure.show_message("No fields to clear", color="red", duration=2)
@@ -706,6 +736,25 @@ class DendrogramControls(QtWidgets.QWidget):
         # N.B. This requires meta data to be present.
         selected_ids = self.figure.selected_ids
         rootids, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
+
+        # Which fields to clear
+        clio_to_clear = []
+        if self.set_clio_type.isChecked():
+            clio_to_clear.append("type")
+        if self.set_clio_flywire_type.isChecked():
+            clio_to_clear.append("flywire_type")
+        if self.set_clio_manc_type.isChecked():
+            clio_to_clear.append("manc_type")
+        clio_to_clear = tuple(clio_to_clear)
+
+        flytable_to_clear = []
+        if self.set_flytable_type.isChecked():
+            flytable_to_clear.append("cell_type")
+        if self.set_flytable_mcns_type.isChecked():
+            flytable_to_clear.append("malecns_type")
+        if self.set_flytable_hemibrain_type.isChecked():
+            flytable_to_clear.append("hemibrain_type")
+        flytable_to_clear = tuple(flytable_to_clear)
 
         # Get the annotation
         import clio
@@ -719,16 +768,10 @@ class DendrogramControls(QtWidgets.QWidget):
         # Submit the annotations
         self.futures[uuid.uuid4()] = self.pool.submit(
             _clear_annotations,
-            bodyids=bodyids
-            if self.set_flywire_check.isChecked()
-            or self.set_type_check.isChecked()
-            or self.set_manc_check.isChecked()
-            else None,
-            rootids=rootids if self.set_mcns_type_check.isChecked() else None,
-            clear_flywire=self.set_flywire_check.isChecked(),
-            clear_type=self.set_type_check.isChecked(),
-            clear_mcns_type=self.set_mcns_type_check.isChecked(),
-            clear_manc_type=self.set_manc_check.isChecked(),
+            bodyids=bodyids if clio_to_clear else None,
+            rootids=rootids if flytable_to_clear else None,
+            clio_to_clear=clio_to_clear,
+            flytable_to_clear=flytable_to_clear,
             clio=clio,  #  pass the module
             ftu=ftu,  #  pass the module
             figure=self.figure,
@@ -1016,56 +1059,59 @@ def _push_annotations(
     rootids,
     clio,
     ftu,
-    set_flywire=True,
-    set_type=True,
-    set_mcns_type=True,
-    set_manc_type=True,
+    clio_to_set,
+    flytable_to_set,
     figure=None,
     controls=None,
 ):
     """Push the current annotation to Clio/FlyTable."""
     try:
-        if bodyids is not None and len(bodyids):
+        if bodyids is not None and len(bodyids) and clio_to_set:
             kwargs = {}
-            if set_flywire:
-                kwargs["flywire_type"] = label
-            if set_type:
-                kwargs["type"] = label
-            if set_manc_type:
-                kwargs["manc_type"] = label
+
+            for field in clio_to_set:
+                kwargs[field] = label
 
             clio.set_fields(bodyids, **kwargs)
 
-        if set_mcns_type and rootids is not None and len(rootids):
+        if rootids is not None and len(rootids) and flytable_to_set:
+            kwargs = {}
+
+            for field in flytable_to_set:
+                kwargs[field] = label
+
+                if field in ("cell_type", "hemibrain_type", "malecns_type"):
+                    kwargs[f"{field}_source"] = os.environ.get(
+                        "BC_ANNOTATION_USER", "bigclust"
+                    )
+
             ftu.info.update_fields(
                 rootids,
-                malecns_type=label,
-                malecns_type_source=os.environ.get("BC_ANNOTATION_USER", "bigclust"),
+                **kwargs,
                 id_col="root_783",
                 dry_run=False,
             )
 
-        set_any_malecns = set_flywire or set_manc_type or set_type
-        if set_any_malecns and set_mcns_type:
+        if clio_to_set and flytable_to_set:
             msg = f"Set {label} for {len(bodyids)} maleCNS and {len(rootids)} FlyWire neurons"
-        elif set_flywire or set_type or set_manc_type:
+        elif clio_to_set:
             msg = f"Set {label} for {len(bodyids)} male CNS neurons"
-        elif set_mcns_type:
+        elif flytable_to_set:
             msg = f"Set {label} for {len(rootids)} FlyWire neurons"
 
         print(f"{msg}:")
-        if bodyids is not None and len(bodyids) and set_any_malecns:
+        if bodyids is not None and len(bodyids) and clio_to_set:
             print("  ", bodyids)
-        if rootids is not None and len(rootids) and set_mcns_type:
+        if rootids is not None and len(rootids) and flytable_to_set:
             print("  ", rootids)
 
         if figure:
             # Update the labels in the dendrogram
-            if set_any_malecns and bodyids is not None:
+            if clio_to_set and bodyids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
                 figure.set_leaf_label(ind, f"{label}(!)")
                 controls.label_overrides.update({i: f"{label}(!)" for i in ind})
-            if set_mcns_type and rootids is not None:
+            if flytable_to_set and rootids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, rootids)]
                 figure.set_leaf_label(ind, f"{label}(!)")
                 controls.label_overrides.update({i: f"{label}(!)" for i in ind})
@@ -1149,29 +1195,6 @@ def _push_super_type(
 ):
     """Push supertype to Clio/FlyTable."""
     try:
-        # # Sanity checks.
-        # if sanity_checks:
-        #     # First get the required data
-        #     mcns_data = None
-        #     if bodyids is not None and len(bodyids):
-        #         mcns_data = clio.fetch_annotations(bodyids)
-        #     fw_data = None
-        #     if rootids is not None and len(rootids):
-        #         table = ftu.info.get_table()
-        #         fw_data = table[table.root_783.isin(np.array(rootids).astype(str).tolist())]
-
-        #     # 1. Do all neurons have the same hemilineage?
-        #     hl = []
-        #     if mcns_data is not None:
-        #         hl += mcns_data.get("itolee_hl").values.tolist()
-        #     if fw_data is not None:
-        #         hl += fw_data.get("ito_lee_hemilineage").values.tolist()
-
-        #     if len(set(hl)) > 1:
-        #         raise ValueError("Not all neurons have the same hemilineage:", set(hl))
-
-        #     # 2. Are all the types in
-
         # Make sure supertype is a string
         super_type = str(super_type)
 
@@ -1215,37 +1238,38 @@ def _clear_annotations(
     rootids,
     clio,
     ftu,
-    clear_flywire=True,
-    clear_type=True,
-    clear_mcns_type=True,
-    clear_manc_type=True,
+    clio_to_clear,
+    flytable_to_clear,
     figure=None,
     controls=None,
 ):
-    """Push the current annotation to Clio."""
+    """Clear the given fields from to Clio/FlyTable."""
     cleared_fields = []
     cleared_ids = []
     try:
-        if bodyids is not None and len(bodyids):
+        if bodyids is not None and len(bodyids) and clio_to_clear:
             kwargs = {}
-            if clear_type:
-                kwargs["type"] = None
-                cleared_fields += ["`type`"]
-            if clear_flywire:
-                kwargs["flywire_type"] = None
-                cleared_fields.append("`flywire_type`")
-            if clear_manc_type:
-                kwargs["manc_type"] = None
-                cleared_fields.append("`manc_type`")
+
+            for field in clio_to_clear:
+                kwargs[field] = None
+                cleared_fields.append(f"`{field}`")
 
             clio.set_fields(bodyids, **kwargs)
             cleared_ids.append(f"{len(bodyids)} maleCNS")
 
-        if clear_mcns_type and rootids is not None and len(rootids):
+        if rootids is not None and len(rootids) and flytable_to_clear:
+            kwargs = {}
+
+            for field in flytable_to_clear:
+                kwargs[field] = None
+                cleared_fields.append(f"`{field}`")
+
+                if field in ("cell_type", "hemibrain_type", "malecns_type"):
+                    kwargs[f"{field}_source"] = None
+
             ftu.info.update_fields(
                 rootids,
-                malecns_type=None,
-                malecns_type_source=None,
+                **kwargs,
                 id_col="root_783",
                 dry_run=False,
             )
@@ -1255,18 +1279,18 @@ def _clear_annotations(
         msg = f"Cleared {', '.join(cleared_fields)} for {' and '.join(cleared_ids)} neuron(s)"
 
         print(f"{msg}:")
-        if bodyids is not None and len(bodyids) and (clear_flywire or clear_type):
+        if bodyids is not None and len(bodyids) and clio_to_clear:
             print("  ", bodyids)
-        if rootids is not None and len(rootids) and clear_mcns_type:
+        if rootids is not None and len(rootids) and flytable_to_clear:
             print("  ", rootids)
 
         if figure:
             # Update the labels in the dendrogram
-            if (clear_flywire or clear_type or clear_manc_type) and bodyids is not None:
+            if clio_to_clear and bodyids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, bodyids)]
                 figure.set_leaf_label(ind, "(cleared)(!)")
                 controls.label_overrides.update({i: "(cleared)(!)" for i in ind})
-            if clear_mcns_type and rootids is not None:
+            if flytable_to_clear and rootids is not None:
                 ind = figure.selected[np.isin(figure.selected_ids, rootids)]
                 figure.set_leaf_label(ind, "(cleared)(!)")
                 controls.label_overrides.update({i: "(cleared)(!)" for i in ind})
