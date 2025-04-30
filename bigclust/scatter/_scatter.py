@@ -21,6 +21,16 @@ AVAILABLE_MARKERS = list(gfx.MarkerShape)
 AVAILABLE_MARKERS.remove("ring")
 
 
+# TODOs:
+# - add PCA step to reduce the number of dimensions before UMAP
+# - add additional coloring options for points
+# - pop-up a new UMAP figure with just the selected points
+# - cycle through UMAP components (1v2, 1v3, 2v3, etc.)
+# - show third component as edges between points (thicker edges = closer points)
+# - show outlines for different labels in different colors
+# - make labels dropdown a multi-select
+
+
 class ScatterPlot(Figure):
     """A Scatterplot for UMAP embeddings.
 
@@ -299,13 +309,13 @@ class ScatterPlot(Figure):
 
     @property
     def selected(self):
-        """Return the selected leafs in the dendrogram."""
+        """Return the indices of selected points in the dendrogram."""
         return self._selected
 
     @selected.setter
     @update_figure
     def selected(self, x):
-        """Select given leafs in the dendrogram."""
+        """Select given points in the dendrogram."""
         if isinstance(x, type(None)):
             x = []
         elif isinstance(x, int):
@@ -490,6 +500,11 @@ class ScatterPlot(Figure):
                 vis.material.edge_width = 2
                 vis.material.color = (1, 1, 1, 0)
                 self._scatter_group.add(vis)
+
+    @update_figure
+    def toggle_labels(self):
+        """Toggle the visibility of labels."""
+        self._label_group.visible = not self._label_group.visible
 
     def make_visuals(self, labels=True, clear=False):
         """Generate the pygfx visuals for the scatterplot."""
@@ -981,7 +996,7 @@ class ScatterPlot(Figure):
             self._render_stale = True
 
     @update_figure
-    def set_point_labels(self, indices, label):
+    def set_labels(self, indices, label):
         """Change the label of given point(s) in the figure."""
         if self._labels is None:
             raise ValueError("No labels were provided.")

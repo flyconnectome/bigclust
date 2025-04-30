@@ -562,7 +562,7 @@ class Dendrogram(Figure):
     @font_size.setter
     @update_figure
     def font_size(self, size):
-        self._font_size = size
+        self._font_size = int(size)
         for t in self._label_visuals:
             if isinstance(t, gfx.Text):
                 t.font_size = size
@@ -1346,11 +1346,16 @@ class Dendrogram(Figure):
                 for l, c in zip(labels_unique, palette.iter_colors(len(labels_unique)))
             }
             if self._datasets_ordered is None:
-                colors = {i: colormap[l] for i, l in zip(self._ids_ordered, self._labels_ordered)}
+                colors = {
+                    i: colormap[l]
+                    for i, l in zip(self._ids_ordered, self._labels_ordered)
+                }
             else:
                 colors = {
                     (i, d): colormap[l]
-                    for i, l, d in zip(self._ids_ordered, self._labels_ordered, self._datasets_ordered)
+                    for i, l, d in zip(
+                        self._ids_ordered, self._labels_ordered, self._datasets_ordered
+                    )
                 }
         elif mode == "dataset":
             palette = cmap.Colormap(palette)
@@ -1382,7 +1387,7 @@ class Dendrogram(Figure):
         self.set_viewer_colors(colors)
 
     @update_figure
-    def set_leaf_label(self, indices, label):
+    def set_labels(self, indices, label):
         """Change the label of given leaf(s) in the dendrogram.
 
         Indices are expected to be in the order of dendrogram left to right!
