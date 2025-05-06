@@ -1,4 +1,5 @@
 import re
+import inspect
 
 import numpy as np
 import pygfx as gfx
@@ -28,6 +29,8 @@ AVAILABLE_MARKERS.remove("ring")
 # - cycle through UMAP components (1v2, 1v3, 2v3, etc.)
 # - show third component as edges between points (thicker edges = closer points)
 # - show outlines for different labels in different colors
+# - show KDE outlines for each label
+# - show centroid + confidence ellipses for each label
 # - make labels dropdown a multi-select
 
 
@@ -347,6 +350,22 @@ class ScatterPlot(Figure):
                 )
             else:
                 self._ngl_viewer.clear()
+
+        if hasattr(self, "_synced_widgets"):
+            for w, func in self._synced_widgets:
+                try:
+                    if (
+                        "datasets" in inspect.signature(func).parameters
+                        and self._datasets_ordered is not None
+                    ):
+                        func(
+                            self._ids[self.selected],
+                            datasets=self._datasets_ordered[self.selected],
+                        )
+                    else:
+                        func(self._ids[self.selected])
+                except BaseException as e:
+                    print(f"Failed to sync widget {w}:\n", e)
 
     @property
     def selected_ids(self):
@@ -894,6 +913,31 @@ class ScatterPlot(Figure):
         # Activate the neuroglancer controls tab
         if hasattr(self, "_controls"):
             self._controls.tabs.setTabEnabled(2, True)
+
+    def sync_widget(self, widget, callback=None):
+        """Connect a widget to the dendrogram.
+
+        Parameters
+        ----------
+        widget
+                The widget to sync.
+        callback
+                The function to call. If `None`, the widget must implement a
+                `.select()` method that takes a list of IDs to select.
+                If either method accepts a `datasets` parameter, the dataset for
+                each ID will also be passed to the method.
+
+        """
+        if callback is None:
+            assert hasattr(widget, "select") and callable(widget.select), (
+                "Widget must have a `select` method that takes a list of IDs to select."
+            )
+            callback = widget.select
+
+        if not hasattr(self, "_synced_widgets"):
+            self._synced_widgets = []
+
+        self._synced_widgets.append((widget, callback))
 
     @update_figure
     def update_point_labels(self):
