@@ -93,7 +93,7 @@ class Dendrogram(Figure):
             self._label_visuals = [None] * len(self._labels)
         self._ids = np.asarray(table[ids]) if ids is not None else None
         self._clusters = np.asarray(table[clusters]) if clusters is not None else None
-        self._leaf_types = (
+        self._markers = (
             np.asarray(table[leaf_types]) if leaf_types is not None else None
         )
         self._label_rotation = 1  # rotate labels by 58 degrees (this is in radiance)
@@ -839,13 +839,13 @@ class Dendrogram(Figure):
             for i, c in enumerate(cmap.Colormap("tab10").iter_colors(len(cn_colors)))
         }
 
-        if self._leaf_types is None:
+        if self._markers is None:
             markers = np.full(len(self), "circle")
         else:
-            assert len(self._leaf_types) == len(self), (
+            assert len(self._markers) == len(self), (
                 "Length of leaf_types must match length of dendrogram."
             )
-            unique_types = np.unique(self._leaf_types)
+            unique_types = np.unique(self._markers)
             available_markers = list(gfx.MarkerShape)
             # Drop markers which look too similar to other
             available_markers.remove("ring")
@@ -855,7 +855,7 @@ class Dendrogram(Figure):
             )
             marker_map = dict(zip(unique_types, available_markers))
             markers = np.array(
-                [marker_map[t] for t in self._leaf_types[self._dendrogram["leaves"]]]
+                [marker_map[t] for t in self._markers[self._dendrogram["leaves"]]]
             )
 
         leaf_pos = []
@@ -1153,7 +1153,7 @@ class Dendrogram(Figure):
                 self._controls = DendrogramControls(
                     self,
                     labels=list(set(self._labels)),
-                    datasets=list(set(self._leaf_types)),
+                    datasets=list(set(self._markers)),
                 )
             self._controls.show()
 

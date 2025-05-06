@@ -941,9 +941,9 @@ class BaseControls(QtWidgets.QWidget):
             indices = self.selected_indices
 
             if isinstance(dataset, str):
-                indices = [i for i in indices if self.figure._leaf_types[i] == dataset]
+                indices = [i for i in indices if self.figure._markers[i] == dataset]
             elif isinstance(dataset, (list, set, tuple)):
-                indices = [i for i in indices if self.figure._leaf_types[i] in dataset]
+                indices = [i for i in indices if self.figure._markers[i] in dataset]
 
             ids = self.figure._ids[indices]
             pyperclip.copy(",".join(np.array(ids).astype(str)))
