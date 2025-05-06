@@ -1113,7 +1113,7 @@ class LabelSearch:
             return np.where(
                 [
                     re.search(str(label), l) is not None
-                    for l in self.scatter._labels_ordered
+                    for l in self.scatter._labels
                 ]
             )[0]
 
