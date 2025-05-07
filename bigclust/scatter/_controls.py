@@ -22,24 +22,11 @@ from ..controls._base_controls import BaseControls, requires_selection
 # - make legend tabbed (QTabWidget)
 
 
-# - self.font_size_slider: different settings [x]
-# - self.label_rotation_label: remove [x]
-# - self.point_size_label: add [x]
-# - new methods: update_umap_setting, run_umap_maybe [x]
-# - rename self.set_point_labels -> self.set_leaf_labels [x]
-# - replace self.set_label_lines with self.set_label_outlines [x]
-# - selected IDs:
-#       - in dendrogam: self.figure._leafs_order[self.figure._selected]
-#       - in scatter: self.figure._selected
-# - labels:
-#     - in dendrogram: self.figure._table[label].astype(str).fillna("").values
-#     - in scatter: self.figure._data[label].astype(str).fillna("").values
-#  -
-
-
 class ScatterControls(BaseControls):
     def __init__(self, figure, labels=[], datasets=[], width=200, height=400):
-        super().__init__(figure, labels=labels, datasets=datasets, width=width, height=height)
+        super().__init__(
+            figure, labels=labels, datasets=datasets, width=width, height=height
+        )
 
         # Some custom scatter-specific UI elements
         self.customize_gui()
@@ -92,9 +79,7 @@ class ScatterControls(BaseControls):
 
         # Get the position of the "Show label counts" checkbox and insert new checkbox below
         index = self.tab1_layout.indexOf(self.label_count_check)
-        self.tab1_layout.insertWidget(
-            index + 1, self.label_outlines_check
-        )
+        self.tab1_layout.insertWidget(index + 1, self.label_outlines_check)
 
     def build_umap_gui(self):
         """Build the GUI for the UMAP tab."""
@@ -145,6 +130,14 @@ class ScatterControls(BaseControls):
             lambda: setattr(self.figure, "_auto_umap", self.umap_auto_run.isChecked())
         )
         self.tab5_layout.addWidget(self.umap_auto_run)
+
+        # Add checkbox to run UMAP on the current selection
+        self.umap_selection_only = QtWidgets.QCheckBox("Run on selection only")
+        self.umap_selection_only.setToolTip(
+            "Whether to run dimensionality reduction on the current selection only. This will spawn a new figure."
+        )
+        self.umap_selection_only.setChecked(False)
+        self.tab5_layout.addWidget(self.umap_selection_only)
 
         ## Settings for UMAP:
 
@@ -395,15 +388,54 @@ class ScatterControls(BaseControls):
         else:
             dists = self.figure._dists
 
-        if isinstance(dists, pd.DataFrame):
-            dists = dists.values
+        if self.umap_selection_only.isChecked():
+            assert isinstance(dists, pd.DataFrame)
+            # Get the selected indices
+            selected_indices = self.selected_indices
 
-        xy = fit.fit_transform(dists.astype(np.float64))
+            # Get the distances for the selected indices
+            dists = dists.iloc[selected_indices, selected_indices]
 
-        # This moves points to their new positions
-        self.figure.move_points(xy)
+            # Get the data for the selected indices
+            data = (
+                self.figure._data.iloc[selected_indices].copy().reset_index(drop=True)
+            )
+
+            # Re-calculate the x/y coordinates
+            xy = fit.fit_transform(dists.values.astype(np.float64))
+            data["x"] = xy[:, 0]
+            data["y"] = xy[:, 1]
+
+            # Create a new figure
+            new_fig = self.figure.__class__(
+                data, dists=dists, hover_info=self.figure._hover_info_org
+            )
+
+            # Add neuroglancer viewer (if it exists)
+            if hasattr(self.figure, "_ngl_viewer"):
+                ngl = self.figure._ngl_viewer.__class__(
+                    data,
+                    neuropil_mesh=self.figure._ngl_viewer._neuropil_mesh,
+                    title="Viewer Selection",
+                )
+                new_fig.sync_viewer(ngl)
+
+        else:
+            if isinstance(dists, pd.DataFrame):
+                dists = dists.values
+
+            xy = fit.fit_transform(dists.astype(np.float64))
+
+            # This moves points to their new positions
+            self.figure.move_points(xy)
 
     def run_umap_maybe(self):
         """Run UMAP if the auto-run checkbox is checked."""
         if self.umap_auto_run.isChecked():
+            if self.umap_selection_only.isChecked():
+                self.figure.show_message(
+                    "Can't automatically run UMAP on a selection. Please run it manually.",
+                    duration=5,
+                    color="red",
+                )
             self.run_umap()

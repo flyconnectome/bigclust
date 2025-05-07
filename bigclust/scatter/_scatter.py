@@ -25,7 +25,6 @@ AVAILABLE_MARKERS.remove("ring")
 # TODOs:
 # - add PCA step to reduce the number of dimensions before UMAP
 # - add additional coloring options for points
-# - pop-up a new UMAP figure with just the selected points
 # - cycle through UMAP components (1v2, 1v3, 2v3, etc.)
 # - show third component as edges between points (thicker edges = closer points)
 # - show outlines for different labels in different colors
@@ -118,6 +117,7 @@ class ScatterPlot(Figure):
         self._selected = None
         self.deselect_on_empty = False
 
+        self._hover_info_org = hover_info  # keep the original, unprocessed hover info
         if hover_info is not None:
             if "{" in hover_info:
                 hover_info = data.apply(hover_info.format_map, axis=1)
