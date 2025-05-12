@@ -361,11 +361,11 @@ class ScatterPlot(Figure):
                 try:
                     if (
                         "datasets" in inspect.signature(func).parameters
-                        and self._datasets_ordered is not None
+                        and self._datasets is not None
                     ):
                         func(
                             self._ids[self.selected],
-                            datasets=self._datasets_ordered[self.selected],
+                            datasets=self._datasets[self.selected],
                         )
                     else:
                         func(self._ids[self.selected])
