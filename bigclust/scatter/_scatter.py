@@ -75,7 +75,7 @@ class ScatterPlot(Figure):
     ):
         super().__init__(size=(1000, 400), **kwargs)
 
-        if "x" not in data.columns:
+        if any(c not in data.columns for c in ("x", "y")):
             if dists is None:
                 raise ValueError(
                     "No coordinates provided and no distance matrix given."
@@ -85,7 +85,7 @@ class ScatterPlot(Figure):
             import umap
 
             fit = umap.UMAP(
-                n_neighbors=15, min_dist=0.1, metric="cosine", random_state=42, n_jobs=1
+                n_neighbors=15, min_dist=0.1, metric="precomputed", random_state=42, n_jobs=1
             )
 
             if isinstance(dists, dict):
