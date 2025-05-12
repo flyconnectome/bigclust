@@ -270,7 +270,12 @@ class NglViewer:
     def clear(self):
         """Clear the viewer of selected segments."""
         self.report("Clearing viewer", flush=True)
-        self.viewer.remove_objects(list(self._segments.values()))
+
+        self.viewer.remove_objects(
+            [o for o in self.viewer.objects if "neuropil" not in str(o)]
+        )
+
+        # self.viewer.remove_objects(list(self._segments.values()))
         self._segments.clear()
 
         self.report(f"  Canceling {len(self.futures)} futures", flush=True)
