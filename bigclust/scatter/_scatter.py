@@ -95,7 +95,7 @@ class ScatterPlot(Figure):
             data["x"] = coords[:, 0]
             data["y"] = coords[:, 1]
 
-        self._data = data
+        self._data = data.reset_index(drop=True)
         self._positions = np.array(data[["x", "y"]].values).astype(np.float32)
         self._default_label_col = labels
         self._labels = (
