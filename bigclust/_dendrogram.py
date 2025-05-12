@@ -487,6 +487,12 @@ class Dendrogram(Figure):
         # Set the selected leafs
         self._selected = np.asarray(sorted(x), dtype=int)
 
+        # Restrict selections if applicable
+        if hasattr(self, "_restrict_selection"):
+            self._selected = self._selected[
+                np.isin(self._datasets_ordered[self._selected], self._restrict_selection)
+            ]
+
         # Clear existing selection
         if hasattr(self, "_selection_visuals"):
             for vis in self._selection_visuals:

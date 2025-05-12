@@ -9,6 +9,7 @@ import numpy as np
 
 from functools import partial
 from PySide6 import QtWidgets, QtCore
+from PySide6.QtGui import QAction
 from concurrent.futures import ThreadPoolExecutor
 
 # TODOs:
@@ -145,26 +146,26 @@ class BaseControls(QtWidgets.QWidget):
         self.add_split(self.tab1_layout)
 
         # Add the dropdown to action all selected objects
-        self.selection_layout = QtWidgets.QHBoxLayout()
-        self.tab1_layout.addLayout(self.selection_layout)
-        self.selection_layout.addWidget(QtWidgets.QLabel("Selected:"))
-        self.sel_action = QtWidgets.QPushButton(text="Pick action")
-        self.sel_action_menu = QtWidgets.QMenu(self)
-        self.sel_action.setMenu(self.sel_action_menu)
+        hlayout = QtWidgets.QHBoxLayout()
+        self.tab1_layout.addLayout(hlayout)
+        hlayout.addWidget(QtWidgets.QLabel("Selection:"))
+        # self.sel_action = QtWidgets.QPushButton(text="Pick action")
+        # self.sel_action_menu = QtWidgets.QMenu(self)
+        # self.sel_action.setMenu(self.sel_action_menu)
 
         # Set actions for the dropdown
-        self.sel_action_menu.addAction("(New Random)")
-        # self.sel_action_menu.actions()[-1].triggered.connect(self.hide_selected)
-        self.sel_action_menu.addAction("(No cluster)")
-        # self.sel_action_menu.actions()[-1].triggered.connect(self.show_selected)
-        self.sel_action_menu.addAction("(Merge clusters)")
-        # self.sel_action_menu.actions()[-1].triggered.connect(self.show_selected)
-        self.sel_action_menu.addAction("(Open URL)")
+        # self.sel_action_menu.addAction("(New Random)")
+        # # self.sel_action_menu.actions()[-1].triggered.connect(self.hide_selected)
+        # self.sel_action_menu.addAction("(No cluster)")
+        # # self.sel_action_menu.actions()[-1].triggered.connect(self.show_selected)
+        # self.sel_action_menu.addAction("(Merge clusters)")
+        # # self.sel_action_menu.actions()[-1].triggered.connect(self.show_selected)
+        # self.sel_action_menu.addAction("(Open URL)")
         # self.sel_action_menu.actions()[-1].triggered.connect(self.show_selected)
 
         # Add the dropdown to action copy to clipboard
-        self.sel_clipboard_action = QtWidgets.QPushButton(text="IDs to Clipboard")
-        self.selection_layout.addWidget(self.sel_clipboard_action)
+        self.sel_clipboard_action = QtWidgets.QPushButton(text="Copy IDs to Clipboard")
+        hlayout.addWidget(self.sel_clipboard_action)
         self.sel_clipboard_action_menu = QtWidgets.QMenu(self)
         self.sel_clipboard_action.setMenu(self.sel_clipboard_action_menu)
 
@@ -188,6 +189,24 @@ class BaseControls(QtWidgets.QWidget):
             self.sel_clipboard_action_menu.actions()[-1].triggered.connect(
                 partial(self.selected_to_clipboard, dataset=datasets[ds])
             )
+
+        # Add a dropdown to restrict the selection to a specific dataset
+        hlayout = QtWidgets.QHBoxLayout()
+        self.tab1_layout.addLayout(hlayout)
+        hlayout.addWidget(QtWidgets.QLabel("Restrict selection to:"))
+        self.sel_restriction = QtWidgets.QComboBox()
+        self.sel_restriction.setToolTip("Restrict the selection to a specific dataset.")
+        self.sel_restriction.addItem("No restriction")
+        datasets['No restriction'] = None
+        for ds in sorted(datasets):
+            self.sel_restriction.addItem(f"{ds}")
+        self.sel_restriction.setCurrentText("No restriction")
+        self.sel_restriction.currentIndexChanged.connect(
+            lambda x: self.figure.restrict_selection(
+                datasets[self.sel_restriction.currentText()]
+            )
+        )
+        hlayout.addWidget(self.sel_restriction)
 
         # Add horizontal divider
         self.add_split(self.tab1_layout)

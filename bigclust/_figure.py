@@ -633,7 +633,9 @@ class Figure(BaseFigure):
                 else:
                     if time.time() > self._fade_out_time:
                         # This means the text will fade fade over 1/0.02 = 50 frames
-                        self._message_text.material.opacity = max(self._message_text.material.opacity - 0.02, 0)
+                        self._message_text.material.opacity = max(
+                            self._message_text.material.opacity - 0.02, 0
+                        )
 
                     if self._message_text.material.opacity <= 0:
                         if self._message_text.parent:
@@ -641,3 +643,28 @@ class Figure(BaseFigure):
                         self.remove_animation(_fade_message)
 
             self.add_animation(_fade_message)
+
+    def restrict_selection(self, restrict_to):
+        """Restrict selection to objects from a given class/origin/dataset.
+
+        Parameters
+        ----------
+        restrict_to :   str | iterable of "strings" | None
+                        Name of the object to restrict selection to. As a special
+                        case this also accepts "No restrictions" to remove any restrictions.
+                        If `None`, will also remove any restrictions.
+
+        """
+        if isinstance(restrict_to, str):
+            if restrict_to == "No restrictions":
+                restrict_to = None
+            else:
+                restrict_to = [restrict_to]
+
+        if not restrict_to:
+            if hasattr(self, "_restrict_selection"):
+                del self._restrict_selection
+            return
+
+        self._restrict_selection = restrict_to
+

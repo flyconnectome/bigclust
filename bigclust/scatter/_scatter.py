@@ -312,13 +312,13 @@ class ScatterPlot(Figure):
 
     @property
     def selected(self):
-        """Return the indices of selected points in the dendrogram."""
+        """Return the indices of selected points in the plot."""
         return self._selected
 
     @selected.setter
     @update_figure
     def selected(self, x):
-        """Select given points in the dendrogram."""
+        """Select given points in the plot."""
         if isinstance(x, type(None)):
             x = []
         elif isinstance(x, int):
@@ -326,12 +326,18 @@ class ScatterPlot(Figure):
 
         if isinstance(x, np.ndarray) and x.dtype == bool:
             assert len(x) == len(self), (
-                "Selection mask must be the same length as the dendrogram."
+                "Selection mask must be the same length as the plot."
             )
             x = np.where(x)[0]
 
         # Set the selected leafs (make sure to sort them)
         self._selected = np.asarray(sorted(x), dtype=int)
+
+        # Restrict selections if applicable
+        if hasattr(self, "_restrict_selection"):
+            self._selected = self._selected[
+                np.isin(self._datasets[self._selected], self._restrict_selection)
+            ]
 
         # Create the new selection visuals
         self.highlight_points(self._selected, color=self._selection_color)
@@ -341,7 +347,6 @@ class ScatterPlot(Figure):
         #     self._controls.update_ann_combo_box()
 
         if hasattr(self, "_ngl_viewer"):
-            # `self._selected` is in order of the dendrogram, we need to translate it to the original order
             if len(self._selected) > 0:
                 self._ngl_viewer.show(
                     self._ids[self.selected],
