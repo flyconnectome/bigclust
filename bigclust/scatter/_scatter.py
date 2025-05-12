@@ -1,4 +1,5 @@
 import re
+import cmap
 import inspect
 
 import numpy as np
@@ -943,6 +944,103 @@ class ScatterPlot(Figure):
             self._synced_widgets = []
 
         self._synced_widgets.append((widget, callback))
+
+    def set_viewer_colors(self, colors):
+        """Set the colors for the neuroglancer viewer.
+
+        Parameters
+        ----------
+        colors :    dict
+                    Dictionary of colors keyed by IDs: {id: color, ...}
+        """
+        if not hasattr(self, "_ngl_viewer"):
+            raise ValueError("No neuroglancer viewer is connected.")
+
+        assert isinstance(colors, dict), "Colors must be a dictionary."
+        self._ngl_viewer.set_colors(colors)
+
+    def set_viewer_color_mode(self, mode, palette="vispy:husl"):
+        """Set the color mode for the neuroglancer viewer.
+
+        Parameters
+        ----------
+        mode :  "dataset" | "cluster" | "label" | "default"
+                The color mode to use.
+
+        """
+        if not hasattr(self, "_ngl_viewer"):
+            raise ValueError("No neuroglancer viewer is connected.")
+
+        assert mode in ["dataset", "cluster", "label", "default"], "Invalid mode."
+
+        if mode == "cluster":
+            # Collect colors for each leaf
+            colors = {}
+            for vis in self._point_visuals:
+                this_ids = self._ids[vis._point_ix]
+
+                if self._datasets is None:
+                    colors.update(zip(this_ids, vis.geometry.colors.data))
+                else:
+                    this_datasets = self._datasets[vis._point_ix]
+                    colors.update(
+                        zip(
+                            zip(this_ids, this_datasets),
+                            vis.geometry.colors.data,
+                        )
+                    )
+        elif mode == "label":
+            labels_unique = np.unique(self._labels.astype(str))
+
+            # To avoid similar labels getting a similar color we will jumble the labels
+            rng = np.random.default_rng(seed=42)
+            rng.shuffle(labels_unique)
+
+            palette = cmap.Colormap(palette)
+            colormap = {
+                l: c.hex
+                for l, c in zip(labels_unique, palette.iter_colors(len(labels_unique)))
+            }
+            if self._datasets is None:
+                colors = {
+                    i: colormap[str(l)]
+                    for i, l in zip(self._ids, self._labels)
+                }
+            else:
+                colors = {
+                    (i, d): colormap[str(l)]
+                    for i, l, d in zip(
+                        self._ids, self._labels, self._datasets
+                    )
+                }
+        elif mode == "dataset":
+            palette = cmap.Colormap(palette)
+            colormap = {
+                i: c.hex
+                for i, c in zip(
+                    range(len(self._point_visuals)),
+                    palette.iter_colors(len(self._point_visuals)),
+                )
+            }
+            colors = {}
+            for i, vis in enumerate(self._point_visuals):
+                this_ids = self._ids[vis._point_ix]
+                this_c = colormap[i]
+                if self._datasets is None:
+                    colors.update({i: this_c for this_id in this_ids})
+                else:
+                    this_datasets = self._datasets[vis._point_ix]
+                    colors.update(
+                        {
+                            (this_id, this_dataset): this_c
+                            for this_id, this_dataset in zip(this_ids, this_datasets)
+                        }
+                    )
+        elif mode == "default":
+            self._ngl_viewer.set_default_colors()
+            return
+
+        self.set_viewer_colors(colors)
 
     @update_figure
     def update_point_labels(self):
