@@ -1,4 +1,5 @@
 from ._dendrogram import Dendrogram
+from .scatter import ScatterPlot
 from ._heatmap import heatmap
 from ._figure import Figure
 
