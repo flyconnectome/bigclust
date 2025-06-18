@@ -1,4 +1,5 @@
 import cmap
+import colorsys
 
 import numpy as np
 
@@ -132,3 +133,42 @@ def adjust_linkage_colors(dendrogram, clusters, cluster_colors=None):
             dendrogram["color_list"][i] = (0.5, 0.5, 0.5, 1.0)
 
     return hinge_to_leafs
+
+
+def apply_matrix(pos, mat):
+    """Apply homogeneous transformation matrix to a set of points."""
+    assert pos.shape[1] == 3
+    assert mat.shape == (4, 4)
+
+    pos = np.hstack([pos, np.ones((pos.shape[0], 1))])
+    pos = np.dot(pos, mat.T)
+    return pos[:, :3]
+
+
+def hash_function(state, value):
+    """This is a modified murmur hash.
+    """
+    k1 = 0xCC9E2D51
+    k2 = 0x1B873593
+    state = state & 0xFFFFFFFF
+    value = (value * k1) & 0xFFFFFFFF
+    value = ((value << 15) | value >> 17) & 0xFFFFFFFF
+    value = (value * k2) & 0xFFFFFFFF
+    state = (state ^ value) & 0xFFFFFFFF
+    state = ((state << 13) | state >> 19) & 0xFFFFFFFF
+    state = ((state * 5) + 0xE6546B64) & 0xFFFFFFFF
+    return state
+
+
+def rgb_from_segment_id(color_seed, segment_id):
+    """Return the RGBA for a segment given a color seed and the segment ID."""
+    segment_id = int(segment_id)  # necessary since segment_id is 64 bit originally
+    result = hash_function(state=color_seed, value=segment_id)
+    newvalue = segment_id >> 32
+    result2 = hash_function(state=result, value=newvalue)
+    c0 = (result2 & 0xFF) / 255.0
+    c1 = ((result2 >> 8) & 0xFF) / 255.0
+    h = c0
+    s = 0.5 + 0.5 * c1
+    v = 1.0
+    return tuple([v * 255 for v in colorsys.hsv_to_rgb(h, s, v)])
