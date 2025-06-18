@@ -1,6 +1,7 @@
 import re
 import cmap
 import inspect
+import warnings
 
 import numpy as np
 import pygfx as gfx
@@ -10,12 +11,13 @@ import matplotlib.colors as mcl
 
 from numbers import Number
 from functools import partial
+from itertools import combinations
 
 from ._controls import ScatterControls
 
 from .._figure import Figure, update_figure
 from .._selection import SelectionGizmo
-from .._visuals import points2gfx, text2gfx
+from .._visuals import points2gfx, text2gfx, lines2gfx
 
 
 AVAILABLE_MARKERS = list(gfx.MarkerShape)
@@ -28,10 +30,12 @@ AVAILABLE_MARKERS.remove("ring")
 # - add additional coloring options for points
 # - cycle through UMAP components (1v2, 1v3, 2v3, etc.)
 # - show third component as edges between points (thicker edges = closer points)
-# - show outlines for different labels in different colors
+# - show outlines for different labels in different colors (perhaps check boxes for each label?)
 # - show KDE outlines for each label
 # - show centroid + confidence ellipses for each label
 # - make labels dropdown a multi-select
+# - export umap as plotly html
+# - add option to "mark" a neuron permanently
 
 
 class ScatterPlot(Figure):
@@ -45,8 +49,9 @@ class ScatterPlot(Figure):
             a distance matrix in `dists`.
     dists : DataFrame or dict, optional
             Data to be used for the UMAP embedding. If a DataFrame,
-            it must contain a distance matrix. If a dict, must be
-            `{dataset: distance matrix}`.
+            it must contain either a (N, N) distance matrix or a (N, M)
+            observation vector. If a dict, must be
+            `{dataset: distance matrix/observation vector}`.
     labels : str, optional
             Column name in `data` containing labels for each point.
             Default is 'label'.
@@ -61,6 +66,7 @@ class ScatterPlot(Figure):
     """
 
     _selection_color = "y"
+    _distance_edges_threshold_default = .5
 
     def __init__(
         self,
@@ -85,14 +91,27 @@ class ScatterPlot(Figure):
             print("Generating UMAP coordinates...", flush=True, end="")
             import umap
 
-            fit = umap.UMAP(
-                n_neighbors=15, min_dist=0.1, metric="precomputed", random_state=42, n_jobs=1
-            )
-
             if isinstance(dists, dict):
-                coords = fit.fit_transform(list(dists.values())[0])
+                _dists = list(dists.values())[0]
+                print(
+                    f" Using the '{list(dists.keys())[0]}' dataset {_dists.shape}...",
+                    flush=True,
+                    end="",
+                )
             else:
-                coords = fit.fit_transform(dists)
+                _dists = dists
+
+            fit = umap.UMAP(
+                n_neighbors=15,
+                min_dist=0.1,
+                metric="precomputed"
+                if (_dists.shape[0] == _dists.shape[1])
+                else "cosine",
+                random_state=42,
+                n_jobs=1,
+            )
+            with warnings.catch_warnings(action="ignore"):
+                coords = fit.fit_transform(_dists)
             data["x"] = coords[:, 0]
             data["y"] = coords[:, 1]
 
@@ -424,6 +443,56 @@ class ScatterPlot(Figure):
 
         self._show_label_lines = x
 
+    @property
+    def show_distance_edges(self):
+        """Show or hide the distance edges."""
+        if not hasattr(self, "_show_distance_edges"):
+            return False
+        return self._show_distance_edges
+
+    @show_distance_edges.setter
+    @update_figure
+    def show_distance_edges(self, x):
+        assert isinstance(x, bool), "`show_distance_edges` must be a boolean."
+
+        if x == self.show_distance_edges:
+            return
+
+        if x:
+            if getattr(self, "_dists", None) is None:
+                raise ValueError("No distance matrix provided.")
+
+            if not getattr(self, "_distance_edge_group", None):
+                self.make_distance_edges()
+            self._distance_edge_group.visible = True
+        elif not x and getattr(self, "_distance_edge_group", None):
+            self._distance_edge_group.visible = False
+
+        self._show_distance_edges = x
+
+    @property
+    def distance_edges_threshold(self):
+        """Get the distance edges threshold."""
+        if not hasattr(self, "_distance_edges_threshold"):
+            return self._distance_edges_threshold_default
+        return self._distance_edges_threshold
+
+    @distance_edges_threshold.setter
+    @update_figure
+    def distance_edges_threshold(self, x):
+        """Set the distance edges threshold."""
+        assert isinstance(x, (int, float)), (
+            "`distance_edges_threshold` must be a number."
+        )
+
+        if x == self.distance_edges_threshold:
+            return
+
+        self._distance_edges_threshold = x
+
+        if getattr(self, "_distance_edge_group", None):
+            self.make_distance_edges()
+
     @classmethod
     def from_observation_vector(
         cls,
@@ -628,7 +697,7 @@ class ScatterPlot(Figure):
         return widget
 
     def make_label_lines(self):
-        """Generate the polygones around each unique label."""
+        """Generate the polygons around each unique label."""
         from scipy.spatial import ConvexHull, Delaunay
 
         # Create a group and add to scene
@@ -678,12 +747,89 @@ class ScatterPlot(Figure):
         vertices[:, 2] = -1
 
         vis = gfx.Mesh(
-            gfx.Geometry(indices=faces.astype(np.int32), positions=vertices.astype(np.float32)),
+            gfx.Geometry(
+                indices=faces.astype(np.int32), positions=vertices.astype(np.float32)
+            ),
             gfx.MeshBasicMaterial(color=(1, 1, 1, 0.1)),
         )
 
         # Create a mesh for the label lines and add to the group
         self._label_line_group.add(vis)
+
+    def make_distance_edges(self):
+        """Generate the lines between each scatter point."""
+        # Create a group and add to scene
+        if not getattr(self, "_distance_edge_group", None):
+            self._distance_edge_group = gfx.Group()
+            self._distance_edge_group.visible = self.show_distance_edges
+            self.scene.add(self._distance_edge_group)
+
+        # Clear the group (we might call this function to update the lines)
+        self._distance_edge_group.clear()
+
+        # Get the distances
+        if isinstance(self._dists, dict):
+            if hasattr(self, "_controls"):
+                dists = self._dists[self._controls.umap_dist_combo_box.currentText()]
+            else:
+                dists = list(self._dists.values())[0]
+        else:
+            dists = self._dists
+
+        if isinstance(dists, pd.DataFrame):
+            dists = dists.values
+
+        if dists.shape[0] != dists.shape[1]:
+            raise ValueError(f"Distance matrix must be square, got {dists.shape}.")
+
+        # Grab the threshold once
+        threshold = self.distance_edges_threshold
+
+        # We really only want one line between each point, so we need to
+        # make sure to only draw the line in one direction
+        # (i.e. only draw the line from i to j, not from j to i)
+        lines = []
+        widths = []
+        for i, j in combinations(np.arange(len(dists)), 2):
+            val = dists[i, j]
+
+            if val > threshold:
+                continue
+
+            # Get the points for this line
+            lines.append(
+                np.array([self._positions[i], self._positions[j], [None, None]])
+            )
+
+            # Thickness of the line
+            widths.append((threshold - val) / threshold * 1 + 0.2)
+
+        # We can't afford making a visual for each line but unfortunately,
+        # pygfx doesn't support lines with variable width. To work around this
+        # we will digitize the lines into N bins and then create a visual for each bin.
+        lines = np.array(lines)
+        widths = np.array(widths)
+        bins = np.histogram_bin_edges(widths, bins='auto')
+        widths_bins = np.digitize(widths, bins)
+
+        for i, width in enumerate(bins):
+            this_bin = widths_bins == i
+
+            if not np.any(this_bin):
+                continue
+
+            # Get the points for this line
+            points = lines[this_bin].reshape(-1, 2)
+
+            # Create a line between the two points
+            vis = lines2gfx(
+                points,
+                color=(1, 1, 1, (width - widths.min()) / (widths.max() - widths.min())),
+                linewidth=width * 5,
+            )
+
+            # Add the visual to the group
+            self._distance_edge_group.add(vis)
 
     def show_controls(self):
         """Show controls."""
@@ -1002,16 +1148,11 @@ class ScatterPlot(Figure):
                 for l, c in zip(labels_unique, palette.iter_colors(len(labels_unique)))
             }
             if self._datasets is None:
-                colors = {
-                    i: colormap[str(l)]
-                    for i, l in zip(self._ids, self._labels)
-                }
+                colors = {i: colormap[str(l)] for i, l in zip(self._ids, self._labels)}
             else:
                 colors = {
                     (i, d): colormap[str(l)]
-                    for i, l, d in zip(
-                        self._ids, self._labels, self._datasets
-                    )
+                    for i, l, d in zip(self._ids, self._labels, self._datasets)
                 }
         elif mode == "dataset":
             palette = cmap.Colormap(palette)
@@ -1113,6 +1254,10 @@ class ScatterPlot(Figure):
         if hasattr(self, "_label_line_group"):
             self._label_line_group.clear()
 
+        # Clear the distance edges if they exist
+        if hasattr(self, "_distance_edge_group"):
+            self._distance_edge_group.clear()
+
         # Stack n_frame times in a new dimension
         self.to_move = np.repeat(steps.reshape(-1, 2, 1), n_frames, axis=2)
 
@@ -1140,6 +1285,8 @@ class ScatterPlot(Figure):
             del self.to_move
             if self.show_label_lines:
                 self.make_label_lines()
+            if self.show_distance_edges:
+                self.make_distance_edges()
             self._render_stale = True
 
     @update_figure
