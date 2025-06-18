@@ -1483,7 +1483,7 @@ class LabelSearch:
         else:
             return np.where(
                 [
-                    re.search(str(label), str(l)) is not None
+                    re.search(label, str(l)) is not None
                     for l in self.dendrogram._labels_ordered
                 ]
             )[0]

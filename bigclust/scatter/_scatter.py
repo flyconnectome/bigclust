@@ -1214,10 +1214,7 @@ class LabelSearch:
             return np.where(self.scatter._labels == label)[0]
         else:
             return np.where(
-                [
-                    re.search(str(label), l) is not None
-                    for l in self.scatter._labels
-                ]
+                [re.search(label, str(l)) is not None for l in self.scatter._labels]
             )[0]
 
     def search_ids(self, id):
