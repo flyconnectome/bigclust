@@ -197,7 +197,7 @@ class BaseControls(QtWidgets.QWidget):
         self.sel_restriction = QtWidgets.QComboBox()
         self.sel_restriction.setToolTip("Restrict the selection to a specific dataset.")
         self.sel_restriction.addItem("No restriction")
-        datasets['No restriction'] = None
+        datasets["No restriction"] = None
         for ds in sorted(datasets):
             self.sel_restriction.addItem(f"{ds}")
         self.sel_restriction.setCurrentText("No restriction")
@@ -406,7 +406,7 @@ class BaseControls(QtWidgets.QWidget):
         label = QtWidgets.QLabel("Font size:")
         label.setToolTip("Set the font size for the labels in the figure.")
         hlayout.addWidget(label)
-        self.font_size_slider = QtWidgets.QSpinBox()
+        self.font_size_slider = QtWidgets.QDoubleSpinBox()
         self.font_size_slider.setRange(1, 200)
         self.font_size_slider.setValue(self.figure.font_size)
         self.font_size_slider.valueChanged.connect(
@@ -557,18 +557,26 @@ class BaseControls(QtWidgets.QWidget):
         grid_layout.addWidget(self.clio_group_button, 0, 1)
 
         # Add button to suggest new MCNS type
-        self.suggest_type_button = QtWidgets.QPushButton("Suggest male-only type")
+        self.suggest_type_button = QtWidgets.QPushButton("Suggest new HB-style type")
         self.suggest_type_button.setToolTip(
-            "Suggest new male-only type based on main input neuropil(s). See console for output."
+            "Suggest new Hemibrain-style type based on main input neuropil(s). See console for output."
         )
         self.suggest_type_button.clicked.connect(self.suggest_type)
         grid_layout.addWidget(self.suggest_type_button, 1, 0, 1, -1)
+
+        # Add button to suggest new MCNS type
+        self.suggest_male_type_button = QtWidgets.QPushButton("Suggest male-only type")
+        self.suggest_male_type_button.setToolTip(
+            "Suggest new male-only type based on main input neuropil(s). See console for output."
+        )
+        self.suggest_male_type_button.clicked.connect(self.suggest_male_type)
+        grid_layout.addWidget(self.suggest_male_type_button, 2, 0, 1, -1)
 
         # Add button to suggest new CB type
         self.suggest_cb_type_button = QtWidgets.QPushButton("Suggest new CB-type")
         self.suggest_cb_type_button.setToolTip("Suggest new CBXXXX type.")
         self.suggest_cb_type_button.clicked.connect(self.suggest_cb_type)
-        grid_layout.addWidget(self.suggest_cb_type_button, 2, 0, 1, -1)
+        grid_layout.addWidget(self.suggest_cb_type_button, 3, 0, 1, -1)
 
         # Add checkbox + button to set new super type
         checkbox = QtWidgets.QCheckBox(" ")  # Do not remove the whitespace!
@@ -577,14 +585,14 @@ class BaseControls(QtWidgets.QWidget):
         checkbox.stateChanged.connect(
             lambda x: self.set_supertype_button.setEnabled(x == 2)
         )
-        grid_layout.addWidget(checkbox, 3, 0)
+        grid_layout.addWidget(checkbox, 4, 0)
         self.set_supertype_button = QtWidgets.QPushButton("Set new SuperType")
         self.set_supertype_button.setToolTip(
             "Assign selected neurons to a supertype. This will use the lowest ID as supertype ID."
         )
         self.set_supertype_button.clicked.connect(self.new_super_type)
         self.set_supertype_button.setEnabled(False)
-        grid_layout.addWidget(self.set_supertype_button, 3, 1)
+        grid_layout.addWidget(self.set_supertype_button, 4, 1)
 
         # This makes it so the legend does not stretch
         self.tab2_layout.addStretch(1)
@@ -863,7 +871,7 @@ class BaseControls(QtWidgets.QWidget):
 
     @requires_selection
     def suggest_type(self):
-        """Suggest a new male-only type for given IDs."""
+        """Suggest a new type for given IDs."""
         selected_ids = self.figure.selected_ids
         # Extract FlyWire root and MaleCNS body IDs from the selected IDs
         # N.B. This requires meta data to be present.
@@ -877,6 +885,23 @@ class BaseControls(QtWidgets.QWidget):
 
         # Threading this doesn't make much sense
         suggest_new_label(bodyids=bodyids)
+
+    @requires_selection
+    def suggest_male_type(self):
+        """Suggest a new male-only type for given IDs."""
+        selected_ids = self.figure.selected_ids
+        # Extract FlyWire root and MaleCNS body IDs from the selected IDs
+        # N.B. This requires meta data to be present.
+        _, bodyids = sort_ids(selected_ids, self.figure.selected_meta)
+
+        if not len(bodyids):
+            self.figure.show_message(
+                "No MCNS neurons selected", color="red", duration=2
+            )
+            return
+
+        # Threading this doesn't make much sense
+        suggest_new_label(bodyids=bodyids, male_only=True)
 
     def suggest_cb_type(self):
         """Suggest a new CB type."""
@@ -974,9 +999,7 @@ class BaseControls(QtWidgets.QWidget):
 
     def set_labels(self):
         """Set the leaf labels."""
-        raise NotImplementedError(
-            "This method should be implemented in a subclass."
-        )
+        raise NotImplementedError("This method should be implemented in a subclass.")
 
     def switch_labels(self):
         """Switch between current and last labels."""
@@ -1313,7 +1336,7 @@ def _push_group(
         raise
 
 
-def suggest_new_label(bodyids):
+def suggest_new_label(bodyids, male_only=False):
     """Suggest a new male-only label."""
 
     # First we need to find the main input neuropil for these neurons
@@ -1352,30 +1375,69 @@ def suggest_new_label(bodyids):
 
     print("Suggested cell type for IDs:", bodyids)
     for roi in roi_in.index.values[:4]:
-        # Check if we already have male-specific types for this ROI
-        this_mcns = CLIO_ANN[
-            CLIO_ANN.type.str.match(f"{roi}[0-9]+m", na=False)
-        ].type.unique()
-
-        if len(this_mcns):
-            new_id = max([int(t[len(roi) : len(roi) + 3]) for t in this_mcns]) + 1
-        else:
+        if not male_only:
             # Check if we already have hemibrain types for this ROI
-            this_hb = HB_ANN[
-                HB_ANN.type.str.match(f"{roi}[0-9]+", na=False)
-            ].morphology_type.unique()
+            this_hb = np.sort(
+                HB_ANN[
+                    HB_ANN.type.str.match(f"{roi}\d+", na=False)
+                ].morphology_type.unique()
+            )
 
+            # Extract the highest hemibrain type ID
+            min_id = 0
             if len(this_hb):
-                highest_hb = max([int(t[len(roi) :]) for t in this_hb])
+                min_id = int(this_hb[-1][len(roi) : len(roi) + 3])
 
-                # Start with the next hundred after the highest hemibrain type
-                new_id = (highest_hb // 100 + 1) * 100
-                if (new_id - highest_hb) < 10:
-                    new_id += 100
+            # Check if we already have male CNS types for this ROI
+            this_mcns = CLIO_ANN[
+                CLIO_ANN.type.str.match(f"{roi}\d+", na=False)
+            ].type.unique()
+            this_mcns = np.sort([t for ty in this_mcns for t in ty.split()])
+            this_mcns_m = this_mcns[[t.endswith("m") for t in this_mcns]]
+            this_mcns_non_m = this_mcns[[not t.endswith("m") for t in this_mcns]]
+
+            if len(this_mcns):
+                min_id = max(min_id, int(this_mcns_non_m[-1][len(roi) : len(roi) + 3]))
+
+            new_id = min_id + 1
+
+            # Make sure we're not running into m-types
+            if len(this_mcns_m):
+                min_id_m = int(this_mcns_m[0][len(roi) : len(roi) + 3])
+                max_id_m = int(this_mcns_m[-1][len(roi) : len(roi) + 3])
+
+                if (new_id >= min_id_m) and (new_id <= max_id_m):
+                    print(
+                        f"Next free ID in roi '{roi}' would be {new_id:03}, but this is already taken by an m-type."
+                    )
+                    continue
+
+            print(f"{roi}{new_id:03} ({roi_in[roi]:.2%})")
+        else:
+            # Check if we already have male-specific types for this ROI
+            this_mcns = CLIO_ANN[
+                CLIO_ANN.type.str.match(f"{roi}\d+m", na=False)
+            ].type.unique()
+
+            if len(this_mcns):
+                new_id = max([int(t[len(roi) : len(roi) + 3]) for t in this_mcns]) + 1
             else:
-                new_id = 1
+                # Check if we already have hemibrain types for this ROI
+                this_hb = HB_ANN[
+                    HB_ANN.type.str.match(f"{roi}\d+", na=False)
+                ].morphology_type.unique()
 
-        print(f"{roi}{new_id:03}m ({roi_in[roi]:.2%})")
+                if len(this_hb):
+                    highest_hb = max([int(t[len(roi) : len(roi) + 1]) for t in this_hb])
+
+                    # Start with the next hundred after the highest hemibrain type
+                    new_id = (highest_hb // 100 + 1) * 100
+                    if (new_id - highest_hb) < 10:
+                        new_id += 100
+                else:
+                    new_id = 1
+
+            print(f"{roi}{new_id:03}m ({roi_in[roi]:.2%})")
 
 
 def is_root_id(x):

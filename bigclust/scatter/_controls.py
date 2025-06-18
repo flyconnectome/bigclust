@@ -1,17 +1,11 @@
-import re
-import os
-import uuid
-import pyperclip
-import traceback
+import warnings
 
 import pandas as pd
 import numpy as np
 
-from functools import partial
 from PySide6 import QtWidgets, QtCore
-from concurrent.futures import ThreadPoolExecutor
 
-from ..controls._base_controls import BaseControls, requires_selection
+from ..controls._base_controls import BaseControls
 
 # TODOs:
 # - add custom legend formatting (e.g. "{object.name}")
@@ -115,10 +109,61 @@ class ScatterControls(BaseControls):
             self.umap_dist_combo_box.setToolTip(
                 "Select the distance to use for UMAP clustering."
             )
-            for key in sorted(self.figure._dists.keys()):
+            for key in self.figure._dists.keys():
                 self.umap_dist_combo_box.addItem(key)
-            self.umap_dist_combo_box.currentIndexChanged.connect(self.run_umap_maybe)
+
+            def update_and_run_umap_maybe():
+                """Update the run button when the distance is changed."""
+                dists = self.figure._dists[self.umap_dist_combo_box.currentText()]
+                if dists.shape[0] == dists.shape[1]:
+                    self.pca_check.setEnabled(False)
+                else:
+                    self.pca_check.setEnabled(True)
+
+                self.run_umap_maybe()
+
+            self.umap_dist_combo_box.currentIndexChanged.connect(
+                update_and_run_umap_maybe
+            )
             self.tab5_layout.addWidget(self.umap_dist_combo_box)
+
+        # Add a checkbox and spinbox to optionally run PCA before UMAP
+        hlayout = QtWidgets.QHBoxLayout()
+        self.tab5_layout.addLayout(hlayout)
+        self.pca_check = QtWidgets.QCheckBox("Reduce dimensions to")
+        self.pca_check.setToolTip(
+            "Whether to reduce the dimensions of the data before running UMAP."
+        )
+        self.pca_check.setChecked(False)
+        hlayout.addWidget(self.pca_check)
+        self.pca_n_components_slider = QtWidgets.QSpinBox()
+        self.pca_n_components_slider.setRange(1, 2000)
+        self.pca_n_components_slider.setSingleStep(1)
+        self.pca_n_components_slider.setValue(100)
+        self.pca_n_components_slider.setToolTip(
+            "Set the number of components to keep after PCA. This is useful for large datasets."
+        )
+        self.pca_n_components_slider.valueChanged.connect(self.run_umap_maybe)
+        self.pca_n_components_slider.setEnabled(self.pca_check.isChecked())
+        hlayout.addWidget(self.pca_n_components_slider)
+        self.pca_check.stateChanged.connect(
+            lambda _: self.pca_n_components_slider.setEnabled(
+                self.pca_check.isChecked()
+            )
+        )
+
+        # Hide the options if the distances are precomputed
+        if not isinstance(self.figure._dists, dict) and (
+            self.figure._dists.shape[0] == self.figure._dists.shape[1]
+        ):
+            self.pca_check.setChecked(False)
+            self.pca_check.setEnabled(False)
+        elif isinstance(self.figure._dists, dict) and (
+            self.figure._dists[self.umap_dist_combo_box.currentText()].shape[0]
+            == self.figure._dists[self.umap_dist_combo_box.currentText()].shape[1]
+        ):
+            self.pca_check.setChecked(False)
+            self.pca_check.setEnabled(False)
 
         # Add a checkbox to automatically run UMAP
         self.umap_auto_run = QtWidgets.QCheckBox("Auto run")
@@ -136,7 +181,7 @@ class ScatterControls(BaseControls):
         self.umap_selection_only.setToolTip(
             "Whether to run dimensionality reduction on the current selection only. This will spawn a new figure."
         )
-        self.umap_selection_only.setChecked(False)
+        self.umap_selection_only.setChecked(True)
         self.tab5_layout.addWidget(self.umap_selection_only)
 
         ## Settings for UMAP:
@@ -158,7 +203,7 @@ class ScatterControls(BaseControls):
         self.umap_n_neighbors_slider = QtWidgets.QSpinBox()
         self.umap_n_neighbors_slider.setRange(1, 200)
         self.umap_n_neighbors_slider.setSingleStep(1)
-        self.umap_n_neighbors_slider.setValue(15)
+        self.umap_n_neighbors_slider.setValue(10)
         self.umap_n_neighbors_slider.valueChanged.connect(self.run_umap_maybe)
         hlayout.addWidget(self.umap_n_neighbors_slider)
 
@@ -265,6 +310,43 @@ class ScatterControls(BaseControls):
         self.umap_random_seed.textChanged.connect(lambda x: self.run_umap_maybe())
         hlayout.addWidget(self.umap_random_seed)
 
+        # Add a checkbox + spinbox to show distances as edges
+        self.show_distance_edges_check = QtWidgets.QCheckBox(
+            "Show distances as edges"
+        )
+        self.show_distance_edges_check.setToolTip(
+            "Whether to show actual distances as edges between points."
+        )
+        self.show_distance_edges_check.setChecked(False)
+        self.tab5_layout.addWidget(self.show_distance_edges_check)
+
+        hlayout = QtWidgets.QHBoxLayout()
+        self.tab5_layout.addLayout(hlayout)
+        self.distance_edges_threshold = QtWidgets.QLabel("Edge threshold:")
+        self.distance_edges_threshold.setToolTip(
+            "Set the threshold for showing edges between points."
+        )
+        hlayout.addWidget(self.distance_edges_threshold)
+        self.distance_edges_slider = QtWidgets.QDoubleSpinBox()
+        self.distance_edges_slider.setRange(0.0, 1.0)
+        self.distance_edges_slider.setSingleStep(0.05)
+        self.distance_edges_slider.setValue(self.figure.distance_edges_threshold)
+        self.distance_edges_slider.setDecimals(2)
+        self.distance_edges_slider.valueChanged.connect(
+            lambda x: setattr(self.figure, "distance_edges_threshold", float(x))
+        )
+        hlayout.addWidget(self.distance_edges_slider)
+        self.show_distance_edges_check.stateChanged.connect(
+            lambda x: setattr(
+                self.figure, "show_distance_edges", bool(x)
+            )
+        )
+        self.show_distance_edges_check.stateChanged.connect(
+            lambda x: self.distance_edges_slider.setEnabled(
+                self.show_distance_edges_check.isChecked()
+            )
+        )
+
         # Stretch
         self.tab5_layout.addStretch(1)
 
@@ -342,11 +424,18 @@ class ScatterControls(BaseControls):
 
     def run_umap(self):
         """Run umap and move points to their new positions."""
+        if isinstance(self.figure._dists, dict):
+            dists = self.figure._dists[self.umap_dist_combo_box.currentText()]
+        else:
+            dists = self.figure._dists
+
+        metric = "precomputed" if (dists.shape[0] == dists.shape[1]) else "cosine"
+
         if self.umap_method_combo_box.currentText() == "UMAP":
             import umap
 
             fit = umap.UMAP(
-                metric="precomputed",
+                metric=metric,
                 n_components=2,
                 n_neighbors=self.umap_n_neighbors_slider.value(),
                 min_dist=self.umap_min_dist_slider.value(),
@@ -363,7 +452,7 @@ class ScatterControls(BaseControls):
                 n_init=self.mds_n_init_slider.value(),
                 max_iter=self.mds_max_iter_slider.value(),
                 eps=self.mds_eps_slider.value(),
-                dissimilarity="precomputed",
+                dissimilarity=metric,
                 random_state=int(self.umap_random_seed.text())
                 if self.umap_random_seed.text()
                 else None,
@@ -374,7 +463,7 @@ class ScatterControls(BaseControls):
 
             fit = KernelPCA(
                 n_components=2,
-                kernel="precomputed",
+                kernel=metric,
             )
         elif self.umap_method_combo_box.currentText() == "PaCMAP":
             import pacmap
@@ -383,26 +472,42 @@ class ScatterControls(BaseControls):
                 n_components=2, n_neighbors=10, MN_ratio=0.5, FP_ratio=2.0
             )
 
-        if isinstance(self.figure._dists, dict):
-            dists = self.figure._dists[self.umap_dist_combo_box.currentText()]
-        else:
-            dists = self.figure._dists
-
         if self.umap_selection_only.isChecked():
             assert isinstance(dists, pd.DataFrame)
             # Get the selected indices
             selected_indices = self.selected_indices
 
             # Get the distances for the selected indices
-            dists = dists.iloc[selected_indices, selected_indices]
+            if dists.shape[0] == dists.shape[1]:
+                dists = dists.iloc[selected_indices, selected_indices].copy()
+            else:
+                dists = dists.iloc[selected_indices].copy()
 
             # Get the data for the selected indices
             data = (
                 self.figure._data.iloc[selected_indices].copy().reset_index(drop=True)
             )
 
+            if metric == "cosine" and self.pca_check.isChecked():
+                from sklearn.decomposition import PCA
+
+                pca = PCA(
+                    n_components=self.pca_n_components_slider.value(),
+                    random_state=int(self.umap_random_seed.text())
+                    if self.umap_random_seed.text()
+                    else None,
+                )
+                print(
+                    f" Using PCA to reduce {dists.shape} observation vector to {self.pca_n_components_slider.value()} components",
+                    flush=True,
+                )
+                _dists = pca.fit_transform(dists.astype(np.float64))
+            else:
+                _dists = dists.values.astype(np.float64)
+
             # Re-calculate the x/y coordinates
-            xy = fit.fit_transform(dists.values.astype(np.float64))
+            with warnings.catch_warnings(action="ignore"):
+                xy = fit.fit_transform(_dists)
             data["x"] = xy[:, 0]
             data["y"] = xy[:, 1]
 
@@ -422,9 +527,25 @@ class ScatterControls(BaseControls):
 
         else:
             if isinstance(dists, pd.DataFrame):
-                dists = dists.values
+                dists = dists.values.astype(np.float64)
 
-            xy = fit.fit_transform(dists.astype(np.float64))
+            if metric == "cosine" and self.pca_check.isChecked():
+                from sklearn.decomposition import PCA
+
+                pca = PCA(
+                    n_components=self.pca_n_components_slider.value(),
+                    random_state=int(self.umap_random_seed.text())
+                    if self.umap_random_seed.text()
+                    else None,
+                )
+                print(
+                    f" Using PCA to reduce {dists.shape} observation vector to {self.pca_n_components_slider.value()} components",
+                    flush=True,
+                )
+                dists = pca.fit_transform(dists)
+
+            with warnings.catch_warnings(action="ignore"):
+                xy = fit.fit_transform(dists)
 
             # This moves points to their new positions
             self.figure.move_points(xy)
