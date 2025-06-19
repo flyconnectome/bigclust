@@ -474,6 +474,10 @@ class BaseControls(QtWidgets.QWidget):
 
         left_vertical_layout.addWidget(QtWidgets.QLabel("Clio:"))
         self.set_clio_type = QtWidgets.QCheckBox("type")
+        self.set_clio_type.setTristate(True)
+        self.set_clio_type.setToolTip(
+            "If fully checked, will edit both type and instance. Set to partially checked leave instance unchanged."
+        )
         left_vertical_layout.addWidget(self.set_clio_type)
         self.set_clio_flywire_type = QtWidgets.QCheckBox("flywire_type")
         left_vertical_layout.addWidget(self.set_clio_flywire_type)
@@ -694,6 +698,10 @@ class BaseControls(QtWidgets.QWidget):
         clio_to_set = []
         if self.set_clio_type.isChecked():
             clio_to_set.append("type")
+            # If the checkbox is fully checked also set the instance
+            type_state = self.set_clio_type.checkState()
+            if type_state == QtCore.Qt.CheckState.Checked:
+                clio_to_set.append("instance")
         if self.set_clio_flywire_type.isChecked():
             clio_to_set.append("flywire_type")
         if self.set_clio_hemibrain_type.isChecked():
@@ -1064,13 +1072,23 @@ def _push_annotations(
     """Push the current annotation to Clio/FlyTable."""
     try:
         if bodyids is not None and len(bodyids) and clio_to_set:
-            kwargs = {}
-
+            ann = pd.DataFrame()
+            ann["bodyid"] = bodyids
             for field in clio_to_set:
-                kwargs[field] = label
+                if field == "instance":
+                    continue
+                ann[field] = label
 
-            clio.set_fields(bodyids, **kwargs)
+            # Generate instances
+            if "instance" in clio_to_set and "type" in clio_to_set:
+                data = clio.fetch_annotations(bodyids)
+                sides = {}
+                for col in ("root_side", "soma_side"):
+                    if col in data.columns:
+                        sides.update(zip(data["bodyid"], data[col]))
+                ann["instance"] = [f"{label}_{sides.get(bid, 'NA')}" for bid in bodyids]
 
+            clio.set_annotations(ann)
         if rootids is not None and len(rootids) and flytable_to_set:
             kwargs = {}
 
