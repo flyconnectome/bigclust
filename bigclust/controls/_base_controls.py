@@ -134,9 +134,15 @@ class BaseControls(QtWidgets.QWidget):
 
         # Add buttons for previous/next
         self.button_layout = QtWidgets.QHBoxLayout()
+        self.button_layout.setContentsMargins(0, 0, 0, 0)
+        self.button_layout.setSpacing(0)
         self.prev_button = QtWidgets.QPushButton("Previous")
         self.prev_button.clicked.connect(self.find_previous)
         self.button_layout.addWidget(self.prev_button)
+        self.find_sel_button = QtWidgets.QPushButton("Select")
+        self.find_sel_button.setToolTip("Select all objects matching the search term.")
+        self.find_sel_button.clicked.connect(self.find_select)
+        self.button_layout.addWidget(self.find_sel_button)
         self.next_button = QtWidgets.QPushButton("Next")
         self.next_button.clicked.connect(self.find_next)
         self.button_layout.addWidget(self.next_button)
@@ -986,6 +992,26 @@ class BaseControls(QtWidgets.QWidget):
             # LabelSearch can be `None` if no match found
             if self._label_search:
                 self._label_search.prev()
+
+    def find_select(self):
+        """Find and select all matches."""
+        text = self.searchbar.text()
+        if text:
+            regex = False
+            if text.startswith("/"):
+                regex = True
+                text = text[1:]
+
+            if (
+                not hasattr(self, "_label_search")
+                or self._label_search.label != text
+                or self._label_search.regex != regex
+            ):
+                self._label_search = self.figure.find_label(text, regex=regex)
+
+            # LabelSearch can be `None` if no match found
+            if self._label_search:
+                self._label_search.select_all()
 
     def selected_to_clipboard(self, dataset=None):
         """Copy selected items to clipboard."""

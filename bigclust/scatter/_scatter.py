@@ -1355,6 +1355,9 @@ class LabelSearch:
         if go_to_first:
             self.next()
 
+    def __len__(self):
+        return len(self.indices)
+
     def search_labels(self, label):
         """Search for a label in the scatter."""
         if not self.regex:
@@ -1368,8 +1371,9 @@ class LabelSearch:
         """Search for an ID in the scatter."""
         return np.where(self.scatter._ids == id)[0]
 
-    def __len__(self):
-        return len(self.indices)
+    def select_all(self):
+        """Select all labels found by the search."""
+        self.scatter.selected = self.indices
 
     def next(self):
         """Go to the next label."""
