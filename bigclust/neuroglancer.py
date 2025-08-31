@@ -1,6 +1,8 @@
 import cmap
 import inspect
+import navis
 import requests
+import octarine_navis_plugin
 
 import dvid as dv
 import numpy as np
@@ -9,7 +11,6 @@ import octarine as oc
 import nglscenes as ngl
 import cloudvolume as cv
 
-import navis
 
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
@@ -124,11 +125,13 @@ class NglViewer:
 
     def make_volume(self, url, mip=0):
         """Make a volume from a URL."""
-        if url.startswith("dvid://"):
+        if url == "memory":
+            return MemoryVolume()
+        elif url.startswith("dvid://"):
             return DVIDVolume(url)
         else:
             try:
-                return cv.CloudVolume(url, progress=False)
+                return cv.CloudVolume(url, progress=False, use_https=True)
             except KeyError as e:
                 # Try with a simple wrapper - CloudVolume is really finicky
                 if url.startswith("precomputed://"):
@@ -516,7 +519,10 @@ class NglViewer:
             traceback.print_exc()
             return e
 
-        return oc.visuals.mesh2gfx(m, **kwargs)
+        if isinstance(m, navis.TreeNeuron):
+            return octarine_navis_plugin.neuron2gfx(m, color=kwargs['color'])
+        else:
+            return oc.visuals.mesh2gfx(m, **kwargs)
 
     def check_futures(self):
         """Check if any futures are done."""
@@ -652,6 +658,31 @@ class PrecomputedMesh:
                 f"{self.url}/{x}", progress=False, datatype="mesh"
             )
         }
+
+
+class MemoryVolume:
+    """Helper class for loading meshes from memory."""
+
+    def __init__(self):
+        self.mesh = self.skeleton = MemorySource()
+
+    def add_neurons(self, neurons):
+        assert isinstance(neurons, (navis.NeuronList, navis.BaseNeuron))
+        self.mesh.neurons.append(neurons)
+
+    def get(self, x, lod=None):
+        return self.mesh.get(x)
+
+
+class MemorySource:
+    """Helper class for loading meshes from memory."""
+
+    def __init__(self):
+        # Initialize empty NeuronList
+        self.neurons = navis.NeuronList([])
+
+    def get(self, x):
+        return {x: self.neurons.idx[x]}
 
 
 @lru_cache

@@ -15,9 +15,9 @@ from itertools import combinations
 
 from ._controls import ScatterControls
 
-from .._figure import Figure, update_figure
-from .._selection import SelectionGizmo
-from .._visuals import points2gfx, text2gfx, lines2gfx
+from ..figure import Figure, update_figure
+from ..selection import SelectionGizmo
+from ..visuals import points2gfx, text2gfx, lines2gfx
 
 
 AVAILABLE_MARKERS = list(gfx.MarkerShape)
@@ -350,7 +350,7 @@ class ScatterPlot(Figure):
             )
             x = np.where(x)[0]
 
-        # Set the selected leafs (make sure to sort them)
+        # Set the selected points (make sure to sort them)
         self._selected = np.asarray(sorted(x), dtype=int)
 
         # Restrict selections if applicable

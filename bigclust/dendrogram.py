@@ -13,9 +13,9 @@ from numbers import Number
 from scipy.cluster.hierarchy import dendrogram as _dendrogram
 
 from .utils import adjust_linkage_colors
-from ._selection import SelectionGizmo
-from ._figure import Figure, update_figure
-from ._visuals import lines2gfx, points2gfx, text2gfx
+from .selection import SelectionGizmo
+from .figure import Figure, update_figure
+from .visuals import lines2gfx, points2gfx, text2gfx
 from .controls import DendrogramControls
 
 """

@@ -5,9 +5,10 @@ from pathlib import Path
 from octarine import Viewer
 from PySide6.QtWidgets import QWidget
 
-from ._dendrogram import Dendrogram
-from ._figure import Figure
-from ._neuroglancer import NglViewer
+from .dendrogram import Dendrogram
+from .scatter import ScatterPlot
+from .figure import Figure
+from .neuroglancer import NglViewer
 
 
 class WindowStateManager:

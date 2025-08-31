@@ -10,7 +10,7 @@ from pygfx.objects import WorldObject
 from pygfx.utils.viewport import Viewport
 from pygfx.utils.transform import AffineTransform
 
-from ._visuals import lines2gfx
+from .visuals import lines2gfx
 
 
 # IDEAS:
@@ -188,6 +188,7 @@ class SelectionGizmo(WorldObject):
         # Triage over event type
         has_mod = self._modifier is None or (self._modifier in event.modifiers)
         if event.type == "pointer_down" and has_mod:
+            # print(f"Starting {self._name} at {self._screen_to_world((event.x, event.y))}")
             self._start_drag(event)
             self._viewport.renderer.request_draw()
             # self.set_pointer_capture(event.pointer_id, event.root)

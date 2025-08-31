@@ -11,10 +11,11 @@ from scipy.spatial.distance import squareform
 from ._selection import SelectionGizmo
 from ._figure import BaseFigure
 from ._visuals import lines2gfx, points2gfx, text2gfx, heatmap2gfx
+from .utils import apply_matrix
 
 
 class Heatmap(BaseFigure):
-    """A dendrogram plot.
+    """A heatmap.
 
     Parameters
     ----------
@@ -39,7 +40,7 @@ class Heatmap(BaseFigure):
     """
 
     x_spacing = 10
-    leaf_size = x_spacing / 10
+    leaf_size = x_spacing / 30
     axes_color = (1, 1, 1, 0.4)
     grid_color = (1, 1, 1, 0.1)
 
@@ -50,6 +51,7 @@ class Heatmap(BaseFigure):
         show=True,
         col_linkage=None,
         row_linkage=None,
+        colormap="viridis",
         **kwargs,
     ):
         super().__init__(size=(800, 800), **kwargs)
@@ -61,13 +63,13 @@ class Heatmap(BaseFigure):
         self.row_linkage = row_linkage
 
         # Set up scenes
-        self.scene_heatmap = gfx.Scene()
-        self.scene_margin_x = gfx.Scene()
-        self.scene_margin_y = gfx.Scene()
+        self.canvas_heatmap = gfx.Scene()
+        self.canvas_margin_x = gfx.Scene()
+        self.canvas_margin_y = gfx.Scene()
         self.background_scene = gfx.Scene()
 
         # Add the background (from BaseFigure) to the scene
-        self.scene_heatmap.add(gfx.Background(None, self._background))
+        self.canvas_heatmap.add(gfx.Background(None, self._background))
 
         # Add a cameras
         self.camera_heatmap = gfx.NDCCamera()
@@ -111,37 +113,84 @@ class Heatmap(BaseFigure):
         #         self._label_group.children[-1]._absolute_position_y = -0.25
 
         #         # Center the text
-        #         self._label_group.children[-1].geometry.text_align = "center"
+        #         self._label_group.children[-1].text_align = "center"
 
         #     # Rotate labels to avoid overlap
         #     rotate = True
         #     if rotate:
         #         for i, t in enumerate(self._label_group.children):
-        #             t.geometry.anchor = "topright"
-        #             t.geometry.text_align = "right"
+        #             t.anchor = "topright"
+        #             t.text_align = "right"
         #             t.local.euler_z = (
         #                 1  # slightly slanted, use `math.pi / 2` for 90 degress
         #             )
         #             t.local.y = t._absolute_position_y = -1
 
-        # Generate marginal dendrograms
+        # Generate marginal dendrogram
         self.col_marginal = self.make_col_dendrogram()
-        self.scene_margin_x.add(self.col_marginal)
+        self.canvas_margin_x.add(self.col_marginal)
 
         # Generate heatmap
         # Note: we're making the heatmap 2x2 so it has the same extent as the NDCCamera
         # which is (-1, 1) in both x and y
-        self._heatmap = heatmap2gfx(self._data, width=2, height=2)
+        self._heatmap = heatmap2gfx(self._data, width=2, height=2, colormap=colormap)
         self._heatmap.local.z = (
             0.9  # this moves the heatmap to the back so we can see the selection gizmo
         )
-        self.scene_heatmap.add(self._heatmap)
+        self.canvas_heatmap.add(self._heatmap)
+
+        # Generate markers on the margin
+        self.row_marginal, self._marker_visuals = self.make_row_marginal()
+        self.canvas_margin_y.add(self.row_marginal)
+
+        # Generate hover widget
+        # Setup hover info
+        if self._labels is not None:
+
+            def hover(event):
+                # Note: we could use e.g. shift-hover to show
+                # more/different info?
+                if event.type == "pointer_enter":
+                    # Translate position to world coordinates
+                    pos = self._screen_to_world(
+                        (event.x, event.y), viewport=self.viewport_margin_y
+                    )
+
+                    # Find the closest leaf
+                    vis = event.current_target
+                    leafs = apply_matrix(vis.geometry.positions.data, vis.world.matrix)
+                    dist = np.linalg.norm(leafs[:, :2] - pos[:2], axis=1)
+                    closest = np.argmin(dist)
+
+                    # Position and show the hover widget
+                    # self._hover_widget.local.position = leafs[closest]
+                    self._hover_widget.visible = True
+
+                    # Set the text
+                    # N.B. there is some funny behaviour where repeatedly setting the same
+                    # text will cause the bounding box to increase every time. To avoid this
+                    # we have to reset the text to anything but an empty string.
+                    self._hover_widget.children[1].set_text(
+                        "asdfgasdfasdfsdafsfasdfasg"
+                    )
+                    self._hover_widget.children[1].set_text(
+                        str(self._labels[self._leafs_order[vis._leaf_ix[closest]]])
+                    )
+
+                elif self._hover_widget.visible:
+                    self._hover_widget.visible = False
+
+            for vis in self._marker_visuals:
+                vis.add_event_handler(hover, "pointer_enter", "pointer_leave")
+
+            self._hover_widget = self.make_hover_widget()
+            self.canvas_heatmap.add(self._hover_widget)  # the hover widget is displayed on top of the heatmap
 
         def layout(event=None):
             w, h = self.renderer.logical_size
             self.viewport_heatmap.rect = 0.1 * w, 0.1 * h, 0.9 * w, 0.9 * h
             self.viewport_margin_x.rect = 0.1 * w, 0, 0.9 * w, 0.1 * h
-            self.viewport_margin_y.rect = 0.9 * w, 0.1 * h, 0.1 * w, 0.9 * h
+            self.viewport_margin_y.rect = 0, 0.1 * h, 0.1 * w, 0.9 * h
             self.reset_view()
 
         layout()
@@ -153,7 +202,7 @@ class Heatmap(BaseFigure):
         # )
 
         def _set_view(x):
-            print(x.bounds)
+            # print(x.bounds)
             self.set_view(
                 x.bounds[0, 0],
                 x.bounds[1, 0],
@@ -161,20 +210,35 @@ class Heatmap(BaseFigure):
                 x.bounds[1, 1],
             )
 
-        # Add the selection gizmo
+        # Add the heatmap selection gizmo
         self.selection_gizmo = SelectionGizmo(
             self.viewport_heatmap,
             self.camera_heatmap,
-            self.scene_heatmap,
+            self.canvas_heatmap,
             line_width=2,
             force_square=True,
             callback_after=_set_view,
+            name="HeatmapSelection",
         )
         # Make sure the Gizmo is above the heatmap and visible
         self.selection_gizmo.local.z = 0
 
         # Double click will reset the view
         self.renderer.add_event_handler(lambda x: self.reset_view(), "double_click")
+
+        # Add the selection gizmo for the labels
+        self.selection_gizmo_y = SelectionGizmo(
+            self.viewport_margin_y,
+            self.camera_margin_y,
+            self.canvas_margin_y,
+            line_width=2,
+            edge_color="r",
+            force_square=False,
+            callback_after=lambda x: self.select_leafs(
+                x.bounds, additive="Control" in x._event_modifiers
+            ),
+            name="LabelSelection",
+        )
 
         # self.camera_heatmap.show_object(self._heatmap)
         # self.camera_heatmap.show_rect(-0.5, 0.5, -0.5, 0.5)
@@ -208,16 +272,49 @@ class Heatmap(BaseFigure):
             )
 
         self.viewport_heatmap.render(
-            self.scene_heatmap, self.camera_heatmap, flush=False
+            self.canvas_heatmap, self.camera_heatmap, flush=False
         )
         self.viewport_margin_x.render(
-            self.scene_margin_x, self.camera_margin_x, flush=False
+            self.canvas_margin_x, self.camera_margin_x, flush=False
         )
-        # self.viewport_margin_y.render(self.scene_margin_y, self.camera_margin_y)
+        self.viewport_margin_y.render(
+            self.canvas_margin_y, self.camera_margin_y, flush=False
+        )
 
         self.renderer.flush()
 
         self.canvas.request_draw()
+
+    def _screen_to_world(self, pos, viewport=None):
+        """Translate screen position to world coordinates."""
+        if viewport is None:
+            viewport = gfx.Viewport.from_viewport_or_renderer(self.renderer)
+
+        print(viewport, pos)
+
+        if not viewport.is_inside(*pos):
+            return None
+
+        # Get position relative to viewport
+        pos_rel = (
+            pos[0] - viewport.rect[0],
+            pos[1] - viewport.rect[1],
+        )
+        vs = viewport.logical_size
+
+        # Convert position to NDC
+        x = pos_rel[0] / vs[0] * 2 - 1
+        y = -(pos_rel[1] / vs[1] * 2 - 1)
+        pos_ndc = (x, y, 0)
+
+        # We're using the same NDC cameras for all viewports, so it shouldn't
+        # matter which we use here
+        pos_ndc += la.vec_transform(
+            self.camera_heatmap.world.position, self.camera_heatmap.camera_matrix
+        )
+        pos_world = la.vec_unproject(pos_ndc[:2], self.camera_heatmap.camera_matrix)
+
+        return pos_world
 
     def _mouse_press(self, event):
         """For debugging: print event coordinates on Shift-click."""
@@ -227,10 +324,12 @@ class Heatmap(BaseFigure):
 
     def __len__(self):
         """Number of original observations in the dendrogram."""
-        return self._linkage.shape[0] + 1
+        return self._data.shape[0]
 
     def select_leafs(self, bounds, additive=False):
         """Select all selectable objects in the region."""
+        print(bounds)
+        return
         # Get the positions of the leaf nodes
         positions = np.copy(self._leaf_visuals.geometry.positions.data)
 
@@ -329,14 +428,26 @@ class Heatmap(BaseFigure):
 
         # (1) Scale the view such that the selected region fits the viewport
         extent = (x2 - x1, y2 - y1)
+
+        if extent[0] == 0 or extent[1] == 0:
+            return
+
         self._heatmap.local.scale_x = 2 / extent[0]
         self._heatmap.local.scale_y = 2 / extent[1]
 
         # (2) Center the view while taking the new scale into account
-        x_center = - (x1 + x2) / 2
-        y_center = - (y1 + y2) / 2
+        x_center = -(x1 + x2) / 2
+        y_center = -(y1 + y2) / 2
         self._heatmap.local.x = x_center * self._heatmap.local.scale_x
         self._heatmap.local.y = y_center * self._heatmap.local.scale_y
+
+        # Adjust the marginal dendrogram
+        self.canvas_margin_x.local.x = self._heatmap.local.x
+        self.canvas_margin_x.local.scale_x = self._heatmap.local.scale_x
+
+        # Adjust the row marginal
+        self.canvas_margin_y.local.y = self._heatmap.local.y
+        self.canvas_margin_y.local.scale_y = self._heatmap.local.scale_y
 
         # self.camera_heatmap.show_rect(x1, x2, y1, y2, up=(0, 1, 0), view_dir=(0, 0, -1))
 
@@ -348,11 +459,32 @@ class Heatmap(BaseFigure):
         self._heatmap.local.x = 0
         self._heatmap.local.y = 0
 
-        # Do the same for the marginal dendrogram
+        # Do the same for the marginal dendrogram on the column
+        self.canvas_margin_x.local.x = 0
+        self.canvas_margin_x.local.scale_x = 1
+
         self.col_marginal.local.scale_x = 2 / (self._data.shape[1] * 10)
-        self.col_marginal.local.scale_y = 2 / np.nanmax(self.col_marginal.geometry.positions.data[:, 1]) * 0.95
-        self.col_marginal.local.y = -1
-        self.col_marginal.local.x = -1
+        self.col_marginal.local.scale_y = (
+            2 / np.nanmax(self.col_marginal.geometry.positions.data[:, 1]) * 0.95
+        )
+        self.col_marginal.local.y = -1  # center
+        self.col_marginal.local.x = -1  # center
+
+        # Do it for the row marginal as well
+        self.canvas_margin_y.local.y = 0
+        self.canvas_margin_y.local.scale_y = 1
+        self.row_marginal.local.scale_y = 2 / (self._data.shape[1] * 10)
+        self.row_marginal.local.y = -1  # center
+
+        # For the hover widget we need to scale the aspect ratio of the text
+        ratio = self.renderer.logical_size[1] / self.renderer.logical_size[0]
+        if ratio > 1:
+            self._hover_widget.children[1].local.scale_x = .2
+            self._hover_widget.children[1].local.scale_y = self._hover_widget.children[1].local.scale_x / ratio
+        else:
+            self._hover_widget.children[1].local.scale_y = .2
+            self._hover_widget.children[1].local.scale_x = ratio * self._hover_widget.children[1].local.scale_y
+
 
     def set_xscale(self, x):
         self._dendrogram_group.local.scale_x = x
@@ -374,35 +506,23 @@ class Heatmap(BaseFigure):
 
         self._text_group.traverse(lambda t: _set_yscale(t, y), skip_invisible=False)
 
-    def make_hover_widget(self, color=(1, 1, 1, 0.5), font_color=(0, 0, 0, 1)):
+    def make_hover_widget(self, color=(1, 1, 1, 0.75), font_color=(0, 0, 0, 1)):
         """Generate a widget for hover info."""
         widget = gfx.Group()
-        widget.visible = False
-        widget.local.position = (
-            0,
-            0,
-            2,
-        )  # this means it's centered and slightly in front
+        widget.visible = False  # hide by default
 
         widget.add(
             gfx.Mesh(
-                gfx.plane_geometry(1, 1),
+                gfx.plane_geometry(2, 2),
                 gfx.MeshBasicMaterial(color=color),
             )
         )
-        widget.children[0].local.position = (
-            0,
-            0,
-            1,
-        )  # this means it's centered and slightly in front
         widget.add(
-            text2gfx("Hover info", color=font_color, font_size=1, anchor="center")
+            text2gfx("Hover info", color=font_color, font_size=1, anchor="middle-center")
         )
-        widget.children[1].local.position = (
-            0,
-            0,
-            2,
-        )  # this means it's centered and slightly in front
+
+        # Because the NDC camera is (-1, 1) in both x and y, we need to scale the text
+        widget.children[1].local.scale_y = len(self) / 100
 
         return widget
 
@@ -467,10 +587,13 @@ class Heatmap(BaseFigure):
         """Generate the lines of the dendrogram."""
         if self.col_linkage is None:
             self.col_linkage = linkage(squareform(self._data.T), method=method)
-        self.col_dendrogram = dendrogram(self.col_linkage, no_plot=True)
+        self.col_dendrogram = dendrogram(
+            self.col_linkage, no_plot=True, above_threshold_color="w"
+        )
 
         self._data = self._data[:, self.col_dendrogram["leaves"]]
         self._data = self._data[self.col_dendrogram["leaves"]]
+        self._leafs_order = np.array(self.col_dendrogram["leaves"])
 
         lines = []
 
@@ -496,7 +619,51 @@ class Heatmap(BaseFigure):
                     colors.append(tuple(cmap.Color(c)))
             lines.append([None, None, None])
 
-        return lines2gfx(np.array(lines), color=np.array(colors))
+        return lines2gfx(
+            np.array(lines),
+            color=np.array(colors),
+            linewidth=0.01,
+            linewidth_space="world",
+        )
+
+    def make_row_marginal(self):
+        """Generate row marginal.
+
+        Currently this includes:
+         - a marker for each row in the heatmap
+        """
+        group = gfx.Group()
+
+        marker_pos = np.zeros((len(self), 3))
+        marker_pos[:, 0] = 0.5  # move to the right (axis is -1 to 1 by default)
+        marker_pos[:, 1] = (np.arange(len(self)) + 0.5) * self.x_spacing
+
+        # For now we will work with uniform markers
+        markers = np.array([None] * len(self))
+
+        markers_vis = []
+        for m in list(set(markers)):
+            ix = markers == m
+            markers_vis.append(
+                points2gfx(
+                    marker_pos[ix],
+                    # color=colors[ix],
+                    color="w",
+                    size_space="world",
+                    marker=m,
+                    pick_write=True,
+                    size=self.leaf_size,
+                )
+            )
+            # This keeps track of the original indices of the leafs
+            markers_vis[-1]._leaf_ix = np.where(ix)[0]
+
+            # Move behind the hover visual
+            markers_vis[-1].local.z = .1
+
+            group.add(markers_vis[-1])
+
+        return group, markers_vis
 
     def __get_lines_old(self):
         """Turn the linkage matrix into the lines of a dendrogram."""

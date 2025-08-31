@@ -14,7 +14,7 @@ def text2gfx(
     anchor="top-right",
     screen_space=False,
     markdown=False,
-    pickable=False
+    pickable=False,
 ):
     """Convert text to pygfx visuals.
 
@@ -243,7 +243,7 @@ def lines2gfx(lines, color, linewidth=1, linewidth_space="screen", dash_pattern=
             if len(color) == n_points:
                 breaks = np.where(np.isnan(lines[:, 0]))[0]
                 offset = np.arange(len(breaks))
-                color = np.insert(color, breaks-offset, np.nan, axis=0)
+                color = np.insert(color, breaks - offset, np.nan, axis=0)
             else:
                 raise ValueError(f"Got {len(color)} colors for {n_points} line points.")
         color = color.astype(np.float32, copy=False)

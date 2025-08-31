@@ -10,7 +10,7 @@ from functools import wraps
 from wgpu.gui.auto import WgpuCanvas
 from wgpu.gui.offscreen import WgpuCanvas as WgpuCanvasOffscreen
 
-from . import utils, _visuals
+from . import utils, visuals
 
 
 def update_figure(func):
@@ -32,6 +32,7 @@ def update_figure(func):
 
 class StateWgpuCanvas(WgpuCanvas):
     """WgpuCanvas that emits signals to its parent figure when its moved/resized."""
+
     def __init__(self, figure, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._figure = figure
@@ -572,7 +573,7 @@ class Figure(BaseFigure):
 
     @update_figure
     def show_message(
-        self, message, position="top-right", font_size=20, color='w', duration=None
+        self, message, position="top-right", font_size=20, color="w", duration=None
     ):
         """Show message on canvas.
 
@@ -607,7 +608,7 @@ class Figure(BaseFigure):
             raise ValueError(f"Unknown position: {position}")
 
         if not hasattr(self, "_message_text"):
-            self._message_text = _visuals.text2gfx(
+            self._message_text = visuals.text2gfx(
                 message, color="white", font_size=font_size, screen_space=True
             )
 
