@@ -9,6 +9,7 @@ Highlights:
 - **Neuroglancer-like 3D viewer**: Visualize neuron morphology in a 3D viewer.
 - **Connectivity widget**: Explore connectivity between neurons.
 
+https://github.com/user-attachments/assets/bf3b8b41-0c72-45f5-bebb-731bcb1e94ac
 
 https://github.com/flyconnectome/bigclust/assets/7161148/f1a0ddcb-522d-4655-ad85-158a810348e8
 
