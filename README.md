@@ -266,21 +266,31 @@ You should now be seeing something like this:
 
 The top window contains the dendrogram, the bottom is your 3D viewer.
 
-Dendrogram controls:
+### Controls
+
+#### Scatter | Dendrogram:
 - scroll to zoom in/out
 - mouse drag to move around
-- shift + mouse drag to select neurons (selected neurons should appear in the viewer)
+- shift + mouse drag to select neurons (selected neurons should appear in the viewer if there is one)
 - `escape` to clear the selection
 - hover over a dendrogram leaf to show extra information (see `hover_info` parameter)
 
-3D viewer controls:
+#### 3D Viewer:
 - scroll up/down to zoom in/out
 - mouse drag to rotate
 - two-finger (or middle mouse button) mouse drag to pan
 - `1`/`2`/`3` to center the view to frontal/dorsal/lateral
 
-In addition to the above, you can press `C` while either the viewer or the dendrogram/scatter window
-is active to bring up a GUI control panel.
+#### Controls GUI
+In addition to the direct controls mentioend above, you can press `C` while either the viewer or the dendrogram/scatter window
+is active to bring up a GUI control panel:
+- for the viewer, this lets you toggle and recolor individual objects (neurons)
+- for the dendrogram/scatter plot, this lets you:
+    - search for neurons by label
+    - copy selection to clipboard
+    - change labels, font size and other visual aspects
+    - create/open neuroglancer links
+    - re-run the UMAP embedding (scatter plot only)
 
 <center><img src="_static/controls.png" width="400"></center>
 
