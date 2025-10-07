@@ -16,4 +16,4 @@ cloud-volume
 requests
 httpx
 nglscenes @ git+https://github.com/schlegelp/nglscenes@main
-
+umap-learn
