@@ -181,7 +181,7 @@ import numpy as np
 import trimesh as tm
 import bigclust as bc
 
-from wgpu.gui.auto import run
+from rendercanvas.auto import loop
 
 
 if __name__ == "__main__":
@@ -244,7 +244,7 @@ if __name__ == "__main__":
 
     # Run the app
     # Note: this is only necessary if we're running bigclust from a script
-    run()
+    loop.run()
 ```
 
 *Make sure to adjust the filepaths if necessary.*

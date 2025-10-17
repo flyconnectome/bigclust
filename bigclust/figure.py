@@ -7,8 +7,8 @@ import pylinalg as la
 
 from abc import abstractmethod
 from functools import wraps
-from wgpu.gui.auto import WgpuCanvas
-from wgpu.gui.offscreen import WgpuCanvas as WgpuCanvasOffscreen
+from rendercanvas.auto import RenderCanvas
+from rendercanvas.offscreen import OffscreenRenderCanvas
 
 from . import utils, visuals
 
@@ -30,7 +30,7 @@ def update_figure(func):
     return inner
 
 
-class StateWgpuCanvas(WgpuCanvas):
+class StateWgpuCanvas(RenderCanvas):
     """WgpuCanvas that emits signals to its parent figure when its moved/resized."""
 
     def __init__(self, figure, *args, **kwargs):
@@ -91,9 +91,9 @@ class BaseFigure:
         defaults.update(kwargs)
 
         if not offscreen:
-            self.canvas = WgpuCanvas(**defaults)
+            self.canvas = RenderCanvas(**defaults)
         else:
-            self.canvas = WgpuCanvasOffscreen(**defaults)
+            self.canvas = OffscreenRenderCanvas(**defaults)
 
         # There is a bug in pygfx 0.1.18 that causes the renderer to crash
         # when using a Jupyter canvas without explicitly setting the pixel_ratio.
@@ -180,7 +180,7 @@ class BaseFigure:
     @property
     def _is_offscreen(self):
         """Check if Viewer is using offscreen canvas."""
-        return isinstance(self.canvas, WgpuCanvasOffscreen)
+        return isinstance(self.canvas, OffscreenRenderCanvas)
 
     @update_figure
     def add_animation(self, x):
@@ -238,7 +238,7 @@ class BaseFigure:
         self.canvas.request_draw(self._animate)
 
         # If this is an offscreen canvas, we don't need to show anything
-        if isinstance(self.canvas, WgpuCanvasOffscreen):
+        if isinstance(self.canvas, OffscreenRenderCanvas):
             return
         # In terminal we can just show the window
         elif not self._is_jupyter:
