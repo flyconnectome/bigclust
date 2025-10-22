@@ -87,7 +87,7 @@ class BaseFigure:
                 )
 
         # Update some defaults as necessary
-        defaults = {"max_fps": max_fps, "size": size}
+        defaults = {"max_fps": max_fps, "size": size, "update_mode": "continuous"}
         defaults.update(kwargs)
 
         if not offscreen:
