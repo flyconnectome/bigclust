@@ -514,11 +514,13 @@ class Heatmap(BaseFigure):
         widget.add(
             gfx.Mesh(
                 gfx.plane_geometry(2, 2),
-                gfx.MeshBasicMaterial(color=color),
+                gfx.MeshBasicMaterial(color=color, alpha_mode="blend"),
             )
         )
         widget.add(
-            text2gfx("Hover info", color=font_color, font_size=1, anchor="middle-center")
+            text2gfx(
+                "Hover info", color=font_color, font_size=1, anchor="middle-center"
+            )
         )
 
         # Because the NDC camera is (-1, 1) in both x and y, we need to scale the text

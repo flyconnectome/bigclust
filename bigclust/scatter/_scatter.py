@@ -218,6 +218,9 @@ class ScatterPlot(Figure):
                 elif self._hover_widget.visible:
                     self._hover_widget.visible = False
 
+                # Request a redraw
+                self.canvas.request_draw()
+
             for vis in self._point_visuals:
                 vis.add_event_handler(hover, "pointer_enter", "pointer_leave")
 
@@ -681,7 +684,7 @@ class ScatterPlot(Figure):
         widget.add(
             gfx.Mesh(
                 gfx.plane_geometry(2 / 4, 2),  # full screen height, 1/4 width
-                gfx.MeshBasicMaterial(color=color),
+                gfx.MeshBasicMaterial(color=color, alpha_mode="blend"),
             )
         )
         widget.add(

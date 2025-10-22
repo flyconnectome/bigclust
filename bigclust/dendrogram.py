@@ -686,7 +686,7 @@ class Dendrogram(Figure):
         widget.add(
             gfx.Mesh(
                 gfx.plane_geometry(1, 1),
-                gfx.MeshBasicMaterial(color=color),
+                gfx.MeshBasicMaterial(color=color, alpha_mode="blend"),
             )
         )
         widget.children[0].local.position = (
