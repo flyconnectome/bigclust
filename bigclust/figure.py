@@ -261,7 +261,7 @@ class BaseFigure:
     def close(self):
         """Close the viewer."""
         # Close if not already closed
-        if not self.canvas.is_closed():
+        if not self.canvas.get_closed():
             self.canvas.close()
 
     @update_figure
