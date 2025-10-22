@@ -165,12 +165,12 @@ class BaseFigure:
     @property
     def max_fps(self):
         """Maximum frames per second to render."""
-        return self.canvas._subwidget._max_fps
+        return self.canvas._subwidget._BaseRenderCanvas__scheduler._max_fps
 
     @max_fps.setter
     def max_fps(self, v):
         assert isinstance(v, int)
-        self.canvas._subwidget._max_fps = v
+        self.canvas._subwidget._BaseRenderCanvas__scheduler._max_fps = v
 
     @property
     def _is_jupyter(self):
@@ -668,4 +668,3 @@ class Figure(BaseFigure):
             return
 
         self._restrict_selection = restrict_to
-
