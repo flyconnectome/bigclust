@@ -1,5 +1,10 @@
 # BigClust
 
+> [!NOTE]
+> We're currently working on [`bigclust2`](https://github.com/flyconnectome/bigclust2), a complete rewrite of this package with
+> extended functionality and a more principled approach to setting up and sharing datasets. If you don't require `bigclust` for
+> legacy reasons, we recommend checking out `bigclust2` instead.
+
 `bigclust` is a set of tools for interactively exploring clusterings via dendrograms or scatterplots with several 100k's data points.
 
 While the focus of `bigclust` is on large connectomic datasets, its modular design allows for easy adaptation to other domains.
